@@ -1,0 +1,13 @@
+# standard packages
+setuptools
+numpy
+pyyaml==5.4.1
+tqdm
+
+# linting
+black
+mypy
+
+# vision library
+opencv-python
+pyglet
