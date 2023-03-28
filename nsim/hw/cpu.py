@@ -27,6 +27,7 @@ Certain devices are read-only or write-only and therefore have to deal with
 invalid operations (or just ignore?).
 """
 from dataclasses import dataclass
+from typing import Callable, Dict, List
 
 from nsim.hw.bus import Bus6502
 
@@ -46,6 +47,13 @@ class FLAGS6502:
 
 
 class SY6502:
+    @dataclass
+    class Instruction:
+        name: str
+        opcode: Callable
+        addrmode: Callable
+        cycle: int = 0
+
     def __init__(self):
         # connect to the bus, which allocates ram
         self.bus: Bus6502 = Bus6502()
@@ -58,6 +66,21 @@ class SY6502:
         self.stkp: int = 0x00  # stack pointer
         self.pc: int = 0x00  # program counter
         self.status: int = 0x00  # status register
+
+        # variable to store fetched data from addressable locations
+        self.fetched: int = 0x00
+        # depending on the address mode, we may read data from different places
+        # in memory, and we store that address here
+        self.addr_abs: int = 0x0000  # 16-bit address
+        # jump may occur, and in 6502 processor, this jump can only occur within
+        # a certain range
+        self.addr_rel: int = 0x00
+        # opcode store
+        self.opcode: int = 0x00
+        # number of cycles left in this operation
+        self.cycle: int = 0
+        # generate instruction list
+        self.instructions: List[self.Instruction] = self.create_instructions()
 
     def read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
@@ -74,6 +97,26 @@ class SY6502:
     def set_flag():
         """Overwrite a flag value."""
 
+    def clock():
+        """Clock function."""
+
+    def reset():
+        """Reset signal. Interrupts the processor after current cycle."""
+
+    def irq():
+        """Interrupt request. Interrupts the processor after current cycle.
+        May be ignored if flags disables this function.
+        """
+
+    def nmi():
+        """Non-maskable interrupt request signal. Interrupts the processor after
+        current cycle. This interrupt signal cannot be ignored.
+        """
+
+    def fetch(self):
+        """Fetch data from addressable memory."""
+
+    # addressing mode section
     def IMP() -> int:
         """Addressing mode."""
 
@@ -109,3 +152,455 @@ class SY6502:
 
     def IZY() -> int:
         """Addressing mode."""
+
+    # Opcode section
+    def ADC() -> int:
+        """Opcodes."""
+
+    def AND() -> int:
+        """Opcodes."""
+
+    def ASL() -> int:
+        """Opcodes."""
+
+    def BCC() -> int:
+        """Opcodes."""
+
+    def BCS() -> int:
+        """Opcodes."""
+
+    def BEQ() -> int:
+        """Opcodes."""
+
+    def BIT() -> int:
+        """Opcodes."""
+
+    def BMI() -> int:
+        """Opcodes."""
+
+    def BNE() -> int:
+        """Opcodes."""
+
+    def BPL() -> int:
+        """Opcodes."""
+
+    def BRK() -> int:
+        """Opcodes."""
+
+    def BVC() -> int:
+        """Opcodes."""
+
+    def BVS() -> int:
+        """Opcodes."""
+
+    def CLC() -> int:
+        """Opcodes."""
+
+    def CLD() -> int:
+        """Opcodes."""
+
+    def CLI() -> int:
+        """Opcodes."""
+
+    def CLV() -> int:
+        """Opcodes."""
+
+    def CMP() -> int:
+        """Opcodes."""
+
+    def CPX() -> int:
+        """Opcodes."""
+
+    def CPY() -> int:
+        """Opcodes."""
+
+    def DEC() -> int:
+        """Opcodes."""
+
+    def DEX() -> int:
+        """Opcodes."""
+
+    def DEY() -> int:
+        """Opcodes."""
+
+    def EOR() -> int:
+        """Opcodes."""
+
+    def INC() -> int:
+        """Opcodes."""
+
+    def INX() -> int:
+        """Opcodes."""
+
+    def INY() -> int:
+        """Opcodes."""
+
+    def JMP() -> int:
+        """Opcodes."""
+
+    def JSR() -> int:
+        """Opcodes."""
+
+    def LDA() -> int:
+        """Opcodes."""
+
+    def LDX() -> int:
+        """Opcodes."""
+
+    def LDY() -> int:
+        """Opcodes."""
+
+    def LSR() -> int:
+        """Opcodes."""
+
+    def NOP() -> int:
+        """Opcodes."""
+
+    def ORA() -> int:
+        """Opcodes."""
+
+    def PHA() -> int:
+        """Opcodes."""
+
+    def PHP() -> int:
+        """Opcodes."""
+
+    def PLA() -> int:
+        """Opcodes."""
+
+    def PLP() -> int:
+        """Opcodes."""
+
+    def ROL() -> int:
+        """Opcodes."""
+
+    def ROR() -> int:
+        """Opcodes."""
+
+    def RTI() -> int:
+        """Opcodes."""
+
+    def RTS() -> int:
+        """Opcodes."""
+
+    def SBC() -> int:
+        """Opcodes."""
+
+    def SEC() -> int:
+        """Opcodes."""
+
+    def SED() -> int:
+        """Opcodes."""
+
+    def SEI() -> int:
+        """Opcodes."""
+
+    def STA() -> int:
+        """Opcodes."""
+
+    def STX() -> int:
+        """Opcodes."""
+
+    def STY() -> int:
+        """Opcodes."""
+
+    def TAX() -> int:
+        """Opcodes."""
+
+    def TAY() -> int:
+        """Opcodes."""
+
+    def TSX() -> int:
+        """Opcodes."""
+
+    def TXA() -> int:
+        """Opcodes."""
+
+    def TXS() -> int:
+        """Opcodes."""
+
+    def TYA() -> int:
+        """Opcodes."""
+
+    def XXX() -> int:
+        """Special illegal opcode catcher."""
+
+    def create_instructions(self) -> List[Instruction]:
+        instructions: List[instructions] = [
+            self.Instruction(**instruction)
+            for instruction in [
+                # line 0
+                {"name": "BRK", "opcode": self.BRK, "addrmode": self.IMM, "cycle": 7},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 3},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "ASL", "opcode": self.ASL, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "PHP", "opcode": self.PHP, "addrmode": self.IMP, "cycle": 3},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.IMM, "cycle": 2},
+                {"name": "ASL", "opcode": self.ASL, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.ABS, "cycle": 4},
+                {"name": "ASL", "opcode": self.ASL, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 1
+                {"name": "BPL", "opcode": self.BPL, "addrmode": self.REL, "cycle": 2},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "ASL", "opcode": self.ASL, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "CLC", "opcode": self.CLC, "addrmode": self.IMP, "cycle": 2},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.ABY, "cycle": 4},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ORA", "opcode": self.ORA, "addrmode": self.ABX, "cycle": 4},
+                {"name": "ASL", "opcode": self.ASL, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                # line 2
+                {"name": "JSR", "opcode": self.JSR, "addrmode": self.ABS, "cycle": 6},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "BIT", "opcode": self.BIT, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "ROL", "opcode": self.ROL, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "PLP", "opcode": self.PLP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.IMM, "cycle": 2},
+                {"name": "ROL", "opcode": self.ROL, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "BIT", "opcode": self.BIT, "addrmode": self.ABS, "cycle": 4},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.ABS, "cycle": 4},
+                {"name": "ROL", "opcode": self.ROL, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 3
+                {"name": "BMI", "opcode": self.BMI, "addrmode": self.REL, "cycle": 2},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "ROL", "opcode": self.ROL, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "SEC", "opcode": self.SEC, "addrmode": self.IMP, "cycle": 2},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.ABY, "cycle": 4},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "AND", "opcode": self.AND, "addrmode": self.ABX, "cycle": 4},
+                {"name": "ROL", "opcode": self.ROL, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                # line 4
+                {"name": "RTI", "opcode": self.RTI, "addrmode": self.IMP, "cycle": 6},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 3},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "LSR", "opcode": self.LSR, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "PHA", "opcode": self.PHA, "addrmode": self.IMP, "cycle": 3},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.IMM, "cycle": 2},
+                {"name": "LSR", "opcode": self.LSR, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "JMP", "opcode": self.JMP, "addrmode": self.ABS, "cycle": 3},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.ABS, "cycle": 4},
+                {"name": "LSR", "opcode": self.LSR, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 5
+                {"name": "BVC", "opcode": self.BVC, "addrmode": self.REL, "cycle": 2},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "LSR", "opcode": self.LSR, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "CLI", "opcode": self.CLI, "addrmode": self.IMP, "cycle": 2},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.ABY, "cycle": 4},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "EOR", "opcode": self.EOR, "addrmode": self.ABX, "cycle": 4},
+                {"name": "LSR", "opcode": self.LSR, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                # line 6
+                {"name": "RTS", "opcode": self.RTS, "addrmode": self.IMP, "cycle": 6},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 3},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "ROR", "opcode": self.ROR, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "PLA", "opcode": self.PLA, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.IMM, "cycle": 2},
+                {"name": "ROR", "opcode": self.ROR, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "JMP", "opcode": self.JMP, "addrmode": self.IND, "cycle": 5},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.ABS, "cycle": 4},
+                {"name": "ROR", "opcode": self.ROR, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 7
+                {"name": "BVS", "opcode": self.BVS, "addrmode": self.REL, "cycle": 2},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "ROR", "opcode": self.ROR, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "SEI", "opcode": self.SEI, "addrmode": self.IMP, "cycle": 2},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.ABY, "cycle": 4},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "ADC", "opcode": self.ADC, "addrmode": self.ABX, "cycle": 4},
+                {"name": "ROR", "opcode": self.ROR, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                # line 8
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "STY", "opcode": self.STY, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "STX", "opcode": self.STX, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 3},
+                {"name": "DEY", "opcode": self.DEY, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "TXA", "opcode": self.TXA, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "STY", "opcode": self.STY, "addrmode": self.ABS, "cycle": 4},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.ABS, "cycle": 4},
+                {"name": "STX", "opcode": self.STX, "addrmode": self.ABS, "cycle": 4},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                # line 9
+                {"name": "BCC", "opcode": self.BCC, "addrmode": self.REL, "cycle": 2},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.IZY, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "STY", "opcode": self.STY, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "STX", "opcode": self.STX, "addrmode": self.ZPY, "cycle": 4},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                {"name": "TYA", "opcode": self.TYA, "addrmode": self.IMP, "cycle": 2},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.ABY, "cycle": 5},
+                {"name": "TXS", "opcode": self.TXS, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 5},
+                {"name": "STA", "opcode": self.STA, "addrmode": self.ABX, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                # line 10
+                {"name": "LDY", "opcode": self.LDY, "addrmode": self.IMM, "cycle": 2},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.IZX, "cycle": 6},
+                {"name": "LDX", "opcode": self.LDX, "addrmode": self.IMM, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "LDY", "opcode": self.LDY, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "LDX", "opcode": self.LDX, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 3},
+                {"name": "TAY", "opcode": self.TAY, "addrmode": self.IMP, "cycle": 2},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.IMM, "cycle": 2},
+                {"name": "TAX", "opcode": self.TAX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "LDY", "opcode": self.LDY, "addrmode": self.ABS, "cycle": 4},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.ABS, "cycle": 4},
+                {"name": "LDX", "opcode": self.LDX, "addrmode": self.ABS, "cycle": 4},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                # line 11
+                {"name": "BCS", "opcode": self.BCS, "addrmode": self.REL, "cycle": 2},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "LDY", "opcode": self.LDY, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "LDX", "opcode": self.LDX, "addrmode": self.ZPY, "cycle": 4},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                {"name": "CLV", "opcode": self.CLV, "addrmode": self.IMP, "cycle": 2},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.ABY, "cycle": 4},
+                {"name": "TSX", "opcode": self.TSX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                {"name": "LDY", "opcode": self.LDY, "addrmode": self.ABX, "cycle": 4},
+                {"name": "LDA", "opcode": self.LDA, "addrmode": self.ABX, "cycle": 4},
+                {"name": "LDX", "opcode": self.LDX, "addrmode": self.ABY, "cycle": 4},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 4},
+                {"name": "CPY", "opcode": self.CPY, "addrmode": self.IMM, "cycle": 2},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                # line 12
+                {"name": "CPY", "opcode": self.CPY, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "DEC", "opcode": self.DEC, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "INY", "opcode": self.INY, "addrmode": self.IMP, "cycle": 2},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.IMM, "cycle": 2},
+                {"name": "DEX", "opcode": self.DEX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "CPY", "opcode": self.CPY, "addrmode": self.ABS, "cycle": 4},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.ABS, "cycle": 4},
+                {"name": "DEC", "opcode": self.DEC, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 13
+                {"name": "BNE", "opcode": self.BNE, "addrmode": self.REL, "cycle": 2},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "DEC", "opcode": self.DEC, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "CLD", "opcode": self.CLD, "addrmode": self.IMP, "cycle": 2},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.ABY, "cycle": 4},
+                {"name": "NOP", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "CMP", "opcode": self.CMP, "addrmode": self.ABX, "cycle": 4},
+                {"name": "DEC", "opcode": self.DEC, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                # line 14
+                {"name": "CPX", "opcode": self.CPX, "addrmode": self.IMM, "cycle": 2},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.IZX, "cycle": 6},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "CPX", "opcode": self.CPX, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.ZP0, "cycle": 3},
+                {"name": "INC", "opcode": self.INC, "addrmode": self.ZP0, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 5},
+                {"name": "INX", "opcode": self.INX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.IMM, "cycle": 2},
+                {"name": "NOP", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.SBC, "addrmode": self.IMP, "cycle": 2},
+                {"name": "CPX", "opcode": self.CPX, "addrmode": self.ABS, "cycle": 4},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.ABS, "cycle": 4},
+                {"name": "INC", "opcode": self.INC, "addrmode": self.ABS, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                # line 15
+                {"name": "BEQ", "opcode": self.BEQ, "addrmode": self.REL, "cycle": 2},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.IZY, "cycle": 5},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 8},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.ZPX, "cycle": 4},
+                {"name": "INC", "opcode": self.INC, "addrmode": self.ZPX, "cycle": 6},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 6},
+                {"name": "SED", "opcode": self.SED, "addrmode": self.IMP, "cycle": 2},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.ABY, "cycle": 4},
+                {"name": "NOP", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 2},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+                {"name": "???", "opcode": self.NOP, "addrmode": self.IMP, "cycle": 4},
+                {"name": "SBC", "opcode": self.SBC, "addrmode": self.ABX, "cycle": 4},
+                {"name": "INC", "opcode": self.INC, "addrmode": self.ABX, "cycle": 7},
+                {"name": "???", "opcode": self.XXX, "addrmode": self.IMP, "cycle": 7},
+            ]
+        ]
+        return instructions
