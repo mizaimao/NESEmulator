@@ -528,7 +528,19 @@ class SY6502:
         return 1
 
     def ASL(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Arithmetic shift left.
+        """
+        self.fetch()
+        temp: int = self.fetched << 1
+        self.flags.C = (temp & 0xFF00) > 0
+        self.flags.Z = (temp & 0x00FF) == 0x00
+        self.flags.N = temp & 0x80
+        if self.instructions[self.opcode].addrmode == self.IMP:
+            self.a = temp & 0x00FF
+        else:
+            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        return 0
 
     def BCC(self) -> int:
         """Opcode function."""
@@ -689,7 +701,21 @@ class SY6502:
         """Opcode function."""
 
     def RTI(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Restore processor before interruption occurred.
+        """
+        self.stkp += 1
+        status: int = self.read(STACK_ADDR + self.stkp)
+        status &= ~self.flags.B
+        status &= ~self.flags.U
+        self.status = status
+
+        self.stkp += 1
+        self.pc = self.read(STACK_ADDR + self.stkp)
+        self.stkp += 1
+        self.pc |= self.read(STACK_ADDR + self.stkp) << 8
+
+        return 0
 
     def RTS(self) -> int:
         """Opcode function."""
