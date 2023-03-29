@@ -266,6 +266,22 @@ class SY6502:
             return fetched
         return
 
+    def _jump(self):
+        """Common codes used in many branching functions.
+        Therefore it's refactored here.
+        """
+        # branching requires an additional cycle
+        self.cycle += 1
+        self.addr_abs = self.pc + self.addr_rel  # jump with offset
+
+        # if the page cross the page, it would require yet another cycle
+        # NOTE: all branching operations would need to check if page changes
+        # and add additional cycle if so
+        if (self.addr_abs & 0xFF00) != (self.pc & 0xFF00):
+            self.cycle += 1
+
+        self.pc = self.addr_abs
+
     # addressing mode section (totally 12)
     # https://slark.me/c64-downloads/6502-addressing-modes.pdf
     def IMP(self) -> int:
@@ -543,49 +559,107 @@ class SY6502:
         return 0
 
     def BCC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch on carry clear.
+        """
+        if self.flags.C == 0:
+            self.cycle += 1
+            self.addr_abs = self.pc + self.addr_rel
+
+            # Page turned, requiring additional cycle.
+            if self.addr_abs & 0xFF00 != self.pc & 0xFF00:
+                self.cycle += 1
+
+            self.pc = self.addr_abs
+        return 0
 
     def BCS(self) -> int:
         """Opcode function.
         Branch-if-status-register-carry-is-set function.
         """
         if self.flags.C == 1:  # get carry flag
-            # branching requires an additional cycle
-            self.cycle += 1
-            self.addr_abs = self.pc + self.addr_rel  # jump with offset
-
-            # if the page cross the page, it would require yet another cycle
-            # NOTE: all branching operations would need to check if page changes
-            # and add additional cycle if so
-            if (self.addr_abs & 0xFF00) != (self.pc & 0xFF00):
-                self.cycle += 1
-
-            self.pc = self.addr_abs
+            self._jump()
         return 0
 
     def BEQ(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch if equal.
+        """
+        # Z is the zero register
+        if self.flags.Z == 1:
+            self._jump()
+        return 0
 
     def BIT(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Tests bits in memory with accumulator.
+        """
+        self.fetch()
+        temp: int = self.a & self.fetched
+        self.flags.Z = (temp & 0x00FF) == 0x00
+        self.flags.N = self.fetched & (1 << 7)
+        self.flags.V = self.fetched & (1 << 6)
+
+        return 0
 
     def BMI(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch if result is negative.
+        """
+        if self.flags.N == 1:
+            self._jump()
+        return 0
 
     def BNE(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch if result is not equal (result is not zero).
+        """
+        if self.flags.Z == 0:
+            self._jump()
+        return 0
 
     def BPL(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch if result is positive.
+        """
+        if self.flags.N == 0:
+            self._jump()
+        return 0
 
     def BRK(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Force break. Program sourced interrupt."""
+        self.pc += 1
+
+        self.flags.I = 1
+        self.write(addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF)
+        self.stkp -= 1
+        self.write(addr=STACK_ADDR + self.stkp, data=self.pc & 0x00FF)
+        self.stkp -= 1
+
+        self.flags.B = 1  # Break flag
+        self.write(addr=STACK_ADDR + self.stkp, data=self.status)
+        self.stkp -= 1
+        self.flags.B = 0
+
+        self.pc = self.read(INTR_ADDR) | (self.read(0xFFFF) << 8)
+        return 0
 
     def BVC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch on overflow clear.
+        """
+        if self.flags.V == 0:
+            self._jump()
+        return 0
 
     def BVS(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch on overflow set.
+        """
+        if self.flags.V == 1:
+            self._jump()
+        return 0
 
     def CLC(self) -> int:
         """Opcode function.
@@ -615,58 +689,193 @@ class SY6502:
         return 0
 
     def CMP(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Compare memory and accumulator.
+        """
+        self.fetch()
+        # Note that we cast these values into a 16-bit space
+        temp: int = self.a - self.fetched
+        self.flags.C = temp >= 0  # Carry flag
+        self.flags.Z = (temp & 0x00FF) == 0x0000  # Zero flag
+        self.flags.N = temp & 0x0080  # Negative flag
+        return 0
 
     def CPX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Compare memory and x register."""
+        self.fetch()
+        # Note that we cast these values into a 16-bit space
+        temp: int = self.x - self.fetched
+        self.flags.C = temp >= 0  # Carry flag
+        self.flags.Z = (temp & 0x00FF) == 0x0000  # Zero flag
+        self.flags.N = temp & 0x0080  # Negative flag
+        return 0
 
     def CPY(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Compare memory and y register."""
+        self.fetch()
+        # Note that we cast these values into a 16-bit space
+        temp: int = self.y - self.fetched
+        self.flags.C = temp >= 0  # Carry flag
+        self.flags.Z = (temp & 0x00FF) == 0x0000  # Zero flag
+        self.flags.N = temp & 0x0080  # Negative flag
+        return 0
 
     def DEC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Decrease memory value by one.
+        """
+        self.fetch()
+        temp: int = self.fetched - 1
+        self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+        return 0
 
     def DEX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Decrease value in x register by one."""
+        self.x -= 1
+        self.flags.Z = (self.x & 0x00FF) == 0x0000
+        self.flags.N = self.x & 0x0080
+        return 0
 
     def DEY(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Decrease value in y register by one."""
+        self.y -= 1
+        self.flags.Z = (self.y & 0x00FF) == 0x0000
+        self.flags.N = self.y & 0x0080
+        return 0
 
     def EOR(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        xor operation on accumulator and memory.
+        """
+        self.fetch()
+        self.a = self.a ^ self.fetched
+        self.flags.Z = self.a == 0x0000
+        self.flags.N = self.a & 0x0080
+        return 0
 
     def INC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Increase value in memory by one.
+        """
+        self.fetch()
+        temp: int = self.fetched + 1  # 16-bit space
+        self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+        return 0
 
     def INX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Increase value of x register by one.
+        """
+        temp: int = self.x + 1  # 16-bit space
+        self.x = temp & 0x00FF
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+        return 0
 
     def INY(self) -> int:
-        """Opcode function."""
+        """Opcode function
+        Increase value of y register by one.
+        """
+        temp: int = self.y + 1  # 16-bit space
+        self.y = temp & 0x00FF
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+        return 0
 
     def JMP(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Jump to new location.
+        """
+        self.pc = self.addr_abs
+        return 0
 
     def JSR(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Jump to new location and save return address to stack.
+        """
+        self.pc -= 1
+        self.write(  # write the higher byte to lower address location
+            addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
+        )
+        self.stkp -= 1
+        self.write(  # write lower byte to higher address location
+            addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
+        )
+        self.stkp -= 1
+
+        self.pc = self.addr_abs
+        return 0
 
     def LDA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Load accumulator with value in memory."""
+        self.fetch()
+        self.a = self.fetched
+        self.flags.Z = self.a == 0x00
+        self.flags.N = self.a & 0x80
+        return 1
 
     def LDX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Load x with value in memory."""
+        self.fetch()
+        self.x = self.fetched
+        self.flags.Z = self.x == 0x00
+        self.flags.N = self.x & 0x80
+        return 1
 
     def LDY(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Load y with value in memory."""
+        self.fetch()
+        self.y = self.fetched
+        self.flags.Z = self.y == 0x00
+        self.flags.N = self.y & 0x80
+        return 1
 
     def LSR(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Shift one bit right (accumulator or memory).
+        """
+        self.fetch()
+        self.flags.C = self.fetched & 0x0001
+        temp: int = self.fetched >> 1
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+
+        if self.instructions[self.opcode].addrmode == self.IMP:
+            self.a = temp & 0x00FF
+        else:
+            self.write(self.addr_abs, temp & 0x00FF)
+        return 0
 
     def NOP(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        No operation. Not all "no operation" are equal.
+        Some can be found at https://wiki.nesdev.com/w/index.php/CPU_unofficial_opcodes
+        Not all are implemented here.
+        """
+        if self.opcode in [0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC]:
+            return 1
+        return 0
 
     def ORA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Bit-wise or operation between accumulator and value in memory."""
+        self.fetch()
+        self.a = self.a | self.fetched
+        self.flags.Z = self.a == 0x00
+        self.flags.N = self.a & 0x80
+
+        return 0
 
     def PHA(self) -> int:
         """Opcode function.
@@ -679,7 +888,16 @@ class SY6502:
         return 0
 
     def PHP(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Push status register to stack.
+        """
+        self.write(
+            addr=STACK_ADDR + self.stkp, data=self.status | self.flags.B | self.flags.U
+        )
+        self.stkp -= 1
+        self.flags.B = 0
+        self.flags.U = 0
+        return 0
 
     def PLA(self) -> int:
         """Opcode function.
@@ -692,23 +910,55 @@ class SY6502:
         return 0
 
     def PLP(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Pop stack to status register.
+        """
+        self.stkp += 1
+        self.status = self.read(addr=STACK_ADDR + self.stkp)
+        self.flags.U = 1  # Unused register
+        return 0
 
     def ROL(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Rotate one bit left (memory or accumulator).
+        """
+        self.fetch()
+        temp: int = self.fetched << 1 | self.flags.C
+        self.flags.C = temp & 0xFF00
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+
+        if self.instructions[self.opcode] == self.IMP:
+            self.a = temp & 0x00FF
+        else:
+            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        return 0
 
     def ROR(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Rotate one bit right (memory or accumulator).
+        """
+        self.fetch()
+        # Note it shifts left by 7
+        temp: int = self.fetched >> 1 | (self.flags.C << 7)
+        self.flags.C = self.fetched & 0x01
+        self.flags.Z = (temp & 0x00FF) == 0x0000
+        self.flags.N = temp & 0x0080
+
+        if self.instructions[self.opcode] == self.IMP:
+            self.a = temp & 0x00FF
+        else:
+            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        return 0
 
     def RTI(self) -> int:
         """Opcode function.
         Restore processor before interruption occurred.
         """
         self.stkp += 1
-        status: int = self.read(STACK_ADDR + self.stkp)
-        status &= ~self.flags.B
-        status &= ~self.flags.U
-        self.status = status
+        self.status: int = self.read(STACK_ADDR + self.stkp)
+        self.status &= ~self.flags.B
+        self.status &= ~self.flags.U
 
         self.stkp += 1
         self.pc = self.read(STACK_ADDR + self.stkp)
@@ -718,7 +968,16 @@ class SY6502:
         return 0
 
     def RTS(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Return from subroutine.
+        """
+        self.stkp += 1
+        self.pc = self.read(STACK_ADDR + self.stkp)
+        self.stkp += 1
+        self.pc |= self.read(STACK_ADDR + self.stkp) << 8
+
+        self.pc += 1
+        return 0
 
     def SBC(self) -> int:
         """Opcode function.
@@ -755,43 +1014,164 @@ class SY6502:
         return 1
 
     def SEC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Set carry flag.
+        """
+        self.flags.C = 1
+        return 0
 
     def SED(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Set decimal flag.
+        """
+        self.flags.D = 1
+        return 0
 
     def SEI(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Set interrupt-disabled flag (enables interrupt).
+        """
+        self.flags.I = 1
+        return 0
 
     def STA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Store accumulator to memory.
+        """
+        self.write(addr=self.addr_abs, data=self.a)
+        return 0
 
     def STX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Store x register value to memory.
+        """
+        self.write(addr=self.addr_abs, data=self.x)
+        return 0
 
     def STY(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Store y register value to memory.
+        """
+        self.write(addr=self.addr_abs, data=self.y)
+        return 0
 
     def TAX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer accumulator to x register.
+        """
+        self.x = self.a
+        self.flags.Z = self.x == 0x00
+        self.flags.N = self.x & 0x80
+        return 0
 
     def TAY(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer accumulator to y register.
+        """
+        self.y = self.a
+        self.flags.Z = self.y == 0x00
+        self.flags.N = self.y & 0x80
+        return 0
 
     def TSX(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer stack pointer to x register.
+        """
+        self.x = self.stkp
+        self.flags.Z = self.x == 0x00
+        self.flags.N = self.x & 0x80
+        return 0
 
     def TXA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer value in x register to accumulator.
+        """
+        self.a = self.x
+        self.flags.Z = self.a == 0x00
+        self.flags.N = self.a & 0x80
+        return 0
 
     def TXS(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer value in x register to stack pointer.
+        """
+        self.stkp = self.x
+        return 0
 
     def TYA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Transfer value in y register to accumulator.
+        """
+        self.a = self.y
+        self.flags.Z = self.a == 0x00
+        self.flags.N = self.a & 0x80
+        return 0
 
     def XXX() -> int:
         """Special illegal opcode catcher."""
+        return 0
+
+    def disassemble(
+        self,
+        start: int,
+        end: int,
+    ) -> Dict[int, str]:
+        """Disassembler function to convert binary instructions into strings.
+
+        Args:
+            start: Start address location.
+            end: End address location.
+
+        Returns:
+            Dict[int, str]: Dictionary with addresses as keys and string
+                instructions as values.
+        """
+        addr: int = start  # The address can be a 32-bit integer.
+        value: int = 0x00  # These three variables are 8-bit.
+        map: Dict[int, str] = {}  # maps a 16-bit value to a string
+        line_addr: int = 0x0000
+
+        # Read from starting address a byte (instruction), and
+        while addr <= end:
+            line_addr = addr
+            # create a string with address
+            s_inst: str = "$" + hex(addr) + ": "
+
+            # then read instruction and acquire its name
+            opcode: int = self.read(addr=addr, readonly=True)
+            addr += 1
+            # pointer to current instruction
+            instruction: self.Instruction = self.instructions[opcode]
+            # append instruction name to string
+            s_inst += instruction.name + " "
+
+            # pointer to addrmode function
+            addrmode: Callable = instruction.addrmode
+            # based on different address modes
+            if addrmode == self.IMP:
+                s_inst += " {IMP}"
+            elif addrmode == self.IMM:
+                value: int = self.read(addr=addr, readonly=True)
+                addr += 1
+                s_inst += "#$" + hex(value) + " {IMM}"
+            elif addrmode in [self.ZP0, self.ZPX, self.ZPY, self.IZX, self.IZY]:
+                lo: int = self.read(addr=addr, readonly=True)
+                hi: int = 0x00
+                addr += 1
+                s_inst += "$" + hex(lo), +f" {addrmode.__name__}"
+            elif addrmode in [self.ABS, self.ABX, self.ABY, self.IND]:
+                lo = self.read(addr=addr, readonly=True)
+                addr += 1
+                hi = self.read(addr=addr, readonly=True)
+                addr += 1
+                s_inst += "$" + hex((hi << 8) | lo) + f" {addrmode.__name__}"
+            elif addrmode == self.REL:
+                value = self.read(addr=addr, readonly=True)
+                addr += 1
+                s_inst += "$" + hex(value) + " [$" + hex(addr + value) + "] {REL}"
+
+            map[line_addr] = s_inst
+        return map
 
     def create_instructions(self) -> List[Instruction]:
         instructions: List[self.Instruction] = [
