@@ -2,6 +2,8 @@
 
 from typing import Tuple, List
 
+import numpy as np
+
 
 RAM_RANGE: Tuple[int, int] = (0x00, 0xFFFF)
 
@@ -11,9 +13,9 @@ class Bus6502:
         self,
     ):
         # add RAM
-        self.ram: List[int] = [
-            0x00 for _ in range(RAM_RANGE[1] - RAM_RANGE[0] + 1)
-        ]
+        mem_size: int = RAM_RANGE[1] - RAM_RANGE[0] + 1
+        # np array with specified dtype notifies overflow
+        self.ram: np.ndarray = np.full((mem_size,), 0x00, dtype=np.uint8)
 
     def read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
