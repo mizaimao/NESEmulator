@@ -31,10 +31,22 @@ from typing import Callable, Dict, List
 
 from nsim.hw.bus import Bus6502
 
+# base address of stack in memory
+STACK_ADDR: int = 0x0100
+# address for initial address pointer
+INIT_ADDR: int = 0xFFFC
+# address for interrupt options to load codes from
+INTR_ADDR: int = 0xFFFE
+NMI_ADDR: int = 0xFFFA
+# resetting the CPU takes time, and this is a hardcoded cycle count
+RESET_TIME: int = 8
+INTR_TIME: int = 7
+NMI_TIME: int = 8
+
 
 @dataclass
 class FLAGS6502:
-    """Flags in 6502 processor."""
+    """Flags in 6502 processor. Each register is a bit."""
 
     C: int = 1 << 0  # carry bit
     Z: int = 1 << 1  # zero
@@ -44,6 +56,30 @@ class FLAGS6502:
     U: int = 1 << 5  # unused
     V: int = 1 << 6  # overflow
     N: int = 1 << 7  # negative (used when using signed variables)
+
+    def extract(self) -> int:
+        """Convert all flags into an 8-bit value.
+        Returns a byte.
+        """
+        flags: int = (
+            self.C + self.Z + self.I + self.D + self.B + self.U + self.V + self.N
+        )
+        return flags
+
+    def apply(self, value: int):
+        """Load a byte and apply it to all eight registers."""
+        self.C = value & 0b00000001
+        self.Z = value & 0b00000010
+        self.I = value & 0b00000100
+        self.D = value & 0b00001000
+        self.B = value & 0b00010000
+        self.U = value & 0b00100000
+        self.V = value & 0b01000000
+        self.N = value & 0b10000000
+
+    def print_flags(self):
+        """Debugging function to print registers."""
+        print(self.C, self.Z, self.I, self.D, self.B, self.U, self.V, self.N)
 
 
 class SY6502:
@@ -127,21 +163,108 @@ class SY6502:
         # decrease cycle count
         self.cycle -= 1
 
-    def reset():
-        """Reset signal. Interrupts the processor after current cycle."""
+    def reset(self):
+        """Reset signal. Interrupts the processor after current cycle.
+        Reset the CPU into null state.
+        """
+        self.a = 0
+        self.x = 0
+        self.y = 0
+        self.stkp = 0xFD
+        self.status = 0x00 | self.flags.U
 
-    def irq():
+        # here we use a non-0x00 address to reset address memory, this is
+        # because at that 0 location there may not be codes for execution.
+        # Instead, 6502 uses address 0xFFFC as the initial address for code
+        # loading.
+        addr = INIT_ADDR
+        # now load the address at that location
+        lower: int = self.read(addr)
+        higher: int = self.read(addr + 1)
+        self.pc = (higher << 8) | lower
+
+        # reset other internal variables
+        self.addr_rel = 0x0000
+        self.addr_abs = 0x0000
+        self.fetched = 0x00
+
+        self.cycle = RESET_TIME
+
+    def irq(self):
         """Interrupt request. Interrupts the processor after current cycle.
         May be ignored if flags disables this function.
-        """
 
-    def nmi():
+        When an interrupt occurs, it will save the current program state to
+        stack.
+        """
+        if self.flags == 0:
+            # save the current program counter to stack
+            # it takes two operations because it's a 2-byte variable
+            self.write(  # write the higher byte to lower address location
+                addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
+            )
+            self.stkp -= 1
+            self.write(  # write lower byte to higher address location
+                addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
+            )
+            self.stkp -= 1
+
+            # we also write status register/flags to stack
+            self.flags.B = 0  # break flag
+            self.flags.U = 1  # unused flag
+            self.flags.I = 1  # disables interrupt flag
+            self.write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
+            self.stkp -= 1
+
+            # set code address to the pre-defined location
+            addr: int = INTR_ADDR
+            lower: int = self.read(addr=addr)
+            higher: int = self.read(addr=addr + 1)
+            self.pc = (higher << 8) | lower
+
+            # add cycle overhead
+            self.cycle = INTR_TIME
+
+    def nmi(self):
         """Non-maskable interrupt request signal. Interrupts the processor after
         current cycle. This interrupt signal cannot be ignored.
+        This is the same function as irq(). Except it cannot be ignored.
         """
+        self.write(  # write the higher byte to lower address location
+            addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
+        )
+        self.stkp -= 1
+        self.write(  # write lower byte to higher address location
+            addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
+        )
+        self.stkp -= 1
 
-    def fetch(self):
-        """Fetch data from addressable memory."""
+        # we also write status register/flags to stack
+        self.flags.B = 0  # break flag
+        self.flags.U = 1  # unused flag
+        self.flags.I = 1  # disables interrupt flag
+        self.write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
+        self.stkp -= 1
+
+        # set code address to the pre-defined location
+        addr: int = NMI_ADDR
+        lower: int = self.read(addr=addr)
+        higher: int = self.read(addr=addr + 1)
+        self.pc = (higher << 8) | lower
+
+        # add cycle overhead
+        self.cycle = NMI_TIME
+
+    def fetch(
+        self,
+    ) -> int:
+        """Fetch data from addressable memory. This returns an 8-bit."""
+        # an exception is implicit (IMP) function who does not return a value.
+        if self.instructions[self.opcode].addrmode != self.IMP:
+            fetched: int = self.read(self.addr_abs)
+            self.fetched = fetched
+            return fetched
+        return
 
     # addressing mode section (totally 12)
     # https://slark.me/c64-downloads/6502-addressing-modes.pdf
@@ -199,7 +322,21 @@ class SY6502:
         return 0
 
     def REL(self) -> int:
-        """Addressing mode."""
+        """Addressing mode.
+        Relative addressing. Only used in branching operations.
+        The jump range can only be within -128 to +127 byte. Since this includes
+        a negative number, who usually has its first bit, or bit 7 set to 1.
+        A check is written to
+        NOTE: this one I don't quite understand.
+        """
+        addr: int = self.read(self.pc)
+        self.pc += 1
+        if addr & 0x80:  # check if it's a negative number
+            # if true (negative), set high byte of relative address to ones
+            # this works out for the binary arithmetic (but why??)
+            addr |= 0xFF00
+        self.addr_rel = addr
+        return 0
 
     def ABS(self) -> int:
         """Addressing mode.
@@ -252,20 +389,143 @@ class SY6502:
         return 0
 
     def IND(self) -> int:
-        """Addressing mode."""
+        """Addressing mode.
+        Indirect addressing. No official docs found. Guessing it uses the second
+        and third byte to form lower and higher byte of a pointer, and we need
+        to get that address.
+        (This is a pointer implementation)
+        """
+        p_lower: int = self.read(self.pc)
+        self.pc += 1
+        p_higher: int = self.read(self.pc)
+        self.pc += 1
+
+        # combine lower and higher to form address of the pointer
+        pointed_addr: int = (p_higher << 8) | p_lower
+        # read content that is pointed
+        lower: int = self.read(pointed_addr)
+        if lower == 0x00FF:
+            # this is a hardware bug of 6502, if the pointer's address would
+            # cause a carry after increment, then the page should be turned, but
+            # the hardware does not do that. Here we emulate that bug as well.
+            high_addr: int = pointed_addr & 0xFF00
+        else:
+            high_addr = pointed_addr + 1
+        higher: int = self.read(high_addr)
+
+        # form that address pointed by pointer
+        self.addr_abs = (higher << 8) | lower
+        return 0
 
     def IZX(self) -> int:
-        """Addressing mode."""
+        """Addressing mode.
+        Indirect addressing. NOTE: this is note an equivalent to indirect Y.
+        The next byte plus value in register x forms the lower byte of an
+        address on page zero. The carry is discarded. Then that address plus its
+        next one forms the desired address.
+        """
+        # first pointer address that forms the lower part of desired address
+        value: int = self.read(self.pc)
+        self.pc += 1
+        lower_addr: int = (value + self.x) & 0x00FF
+        # this way we discard carry
+        higher_addr: int = (value + self.x + 1) & 0x00FF
+
+        self.addr_abs = (self.read(higher_addr) << 8) | self.read(lower_addr)
+        return 0
 
     def IZY(self) -> int:
-        """Addressing mode."""
+        """Addressing mode.
+        Indirect addressing. The second byte of the instruction is an offset on
+        page zero, and the content of this address is added to value in register
+        y; and this forms lower eight bits of address. The carry of that
+        addition operation is then added to the next zero-page address and forms
+        the higher eight bits of address.
+
+        NOTE: The actual implementation doesn't really reflect what's described
+        above, but...
+        """
+        # read offset location of the pointer
+        value: int = self.read(self.pc)
+        self.pc += 1
+
+        lower: int = self.read(value & 0x00FF)
+        higher: int = self.read((value + 1) & 0x00FF)
+
+        addr: int = higher << 8 | lower
+        addr += self.y
+
+        if (addr & 0xFF00) != (higher << 8):
+            return 1
+        return 0
 
     # Opcode section (totally 56)
     def ADC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Addition function. Add values in accumulator with fetched one, plus
+        carry.
+        This is a rather complex function because sometimes programmer would
+        want to use signed numbers (-128 to 127) rather than unsigned ones
+        (0 to 255). Therefore an example as unsigned number 132 can be
+        mistakenly treated as -124 in signed manner (overflow).
+        Dealing with negative numbers doesn't require special hardware as maths
+        still works out (computer organization).
+        6502 has two flags to help signed addition operations:
+        1. If the most significant bit is 1, it can be a negative number
+
+        Adding two signed 8-bit numbers (-128 to 127) may result an overflow;
+        Adding a positive 8-bit and a negative 8-bit will never overflow.
+        Adding two signed negative numbers may also cause overflow.
+        Therefore, the "V" register in flag register also helps when two signed
+        numbers are added.
+
+        A truth table can help (0, 1 are the most significant bit of that
+        number):
+
+                A   M   R   V     A^R ~A^M    &
+                0   0   0   0      0    1     0
+                0   0   1   1      1    1     1
+                0   1   0   0      0    0     0
+                0   1   1   1      1    0     0
+                1   0   0   0      1    0     0
+                1   0   1   1      0    0     0
+                1   1   0   0      1    1     1
+                1   1   1   1      0    1     0
+
+        where A is the number in accumulator, M is fetched number, and R is the
+        result. V is the overflow flag, and A^R is exclusive-or.
+        We can there are only two situations where overflow should be set, which
+        can be calculated by using binary "and" between XOR(A, R) and ~XOR(A, M)
+        """
+        self.fetch()
+        # here we perform the addition in the convenient 16-bit domain.
+        temp: int = self.a + self.fetched + self.flags.C  # carry
+        # set carry flag if result exceeds 8-bit domain
+        self.flags.C = temp > 255
+        # set zero flag just as it was before (???)
+        self.flags.Z = (temp & 0x00FF) == 0
+        # the carry flag should be the most significant bit of low byte
+        self.flags.N = temp & 0x80
+        # now the overflow flag
+        xor_result: int = self.a ^ self.temp
+        not_xor_result: int = ~(self.a ^ self.fetched)
+        self.flags.V = (xor_result & not_xor_result) & 0x80
+        # save back the result to accumulator (after filtering out higher byte)
+        self.a = temp & 0x00FF
+        return 1
 
     def AND(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Bit-wise and function. Is a foundation of all other functions.
+        It's a bit-wise "and" between the accumulator and the fetched value.
+        """
+        self.fetch()
+        self.a = self.a & self.fetched
+
+        # set flags
+        self.flags.Z = self.a == 0x00  # update status register as required
+        self.flags.N = self.a & 0x80  # set zero flag
+        return 1
 
     def ASL(self) -> int:
         """Opcode function."""
@@ -274,7 +534,22 @@ class SY6502:
         """Opcode function."""
 
     def BCS(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Branch-if-status-register-carry-is-set function.
+        """
+        if self.flags.C == 1:  # get carry flag
+            # branching requires an additional cycle
+            self.cycle += 1
+            self.addr_abs = self.pc + self.addr_rel  # jump with offset
+
+            # if the page cross the page, it would require yet another cycle
+            # NOTE: all branching operations would need to check if page changes
+            # and add additional cycle if so
+            if (self.addr_abs & 0xFF00) != (self.pc & 0xFF00):
+                self.cycle += 1
+
+            self.pc = self.addr_abs
+        return 0
 
     def BEQ(self) -> int:
         """Opcode function."""
@@ -301,16 +576,31 @@ class SY6502:
         """Opcode function."""
 
     def CLC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Clear carry function.
+        """
+        self.flags.C = 0  # clear the carry flag
+        return 0
 
     def CLD(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Clear decimal mode function."""
+        self.flags.D = 0
+        return 0
 
     def CLI(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Clear disable-interrupts function.
+        """
+        self.flags.I = 0
+        return 0
 
     def CLV(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Clear overflow flag function.
+        """
+        self.flags.V = 0
+        return 0
 
     def CMP(self) -> int:
         """Opcode function."""
@@ -367,13 +657,27 @@ class SY6502:
         """Opcode function."""
 
     def PHA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Pushes the accumulator to the stack.
+        Note that the stack exists in RAM and therefore we need to call the
+        memory-modifying function to do that.
+        """
+        self.write(addr=STACK_ADDR + self.stkp, data=self.a)
+        self.stkp -= 1
+        return 0
 
     def PHP(self) -> int:
         """Opcode function."""
 
     def PLA(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Pop the stack.
+        """
+        self.stkp += 1
+        self.a = self.read(addr=STACK_ADDR + self.stkp)
+        self.flags.Z = self.a == 0x00
+        self.flags.N = self.a & 0x80
+        return 0
 
     def PLP(self) -> int:
         """Opcode function."""
@@ -391,7 +695,38 @@ class SY6502:
         """Opcode function."""
 
     def SBC(self) -> int:
-        """Opcode function."""
+        """Opcode function.
+        Subtraction function. It updates accumulator with the result of
+        accumulator - fetched - (1 - carry); where the last item is the
+        opposite of carry bit, because in this case it's a "borrow" bit.
+
+        It is wise for hardware designers to reuse existing implementation, and
+        in this case, we can convert this subtraction operation into addition.
+        We don't know if 6502 uses its addition module to perform subtraction.
+
+        A = A - M - (1 - C) becomes A + (-1) * (M - (1 - C))
+        then, A = A + (- M) + 1 + C
+        and when flipping the sign of a signed number, we invert each bit and
+        plus one. E.g.
+        5 = 0b00000101 and -5 = 0b11111010 + 0b00000001
+        Note that plus one operation can be included in the above deduced
+        formula, so for this subtraction operation, all we need to do is to
+        invert the number and use the addition function (ADC) codes.
+        """
+        self.fetch()
+        # we can use the 16-bit space for our convenience
+        # use xor function to invert the last 8 bits
+        value: int = self.fetched ^ 0x00FF
+        # after this operation, it's identical to addition function
+
+        temp: int = self.a + value + self.flags.C
+        self.flags.C = temp & 0xFF00
+        self.flags.Z = (temp & 0x00FF) == 0
+        self.flags.N = temp & 0x80
+        # now the overflow flag
+        self.flags.V = ((temp ^ self.a) & (temp ^ value)) & 0x0080
+        self.a = temp & 0x00FF
+        return 1
 
     def SEC(self) -> int:
         """Opcode function."""
