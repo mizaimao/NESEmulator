@@ -93,7 +93,7 @@ class Debugger(pyglet.window.Window):
         hexify: Callable = lambda h: f"{h:0{2}X}"
 
         s_raw: str
-        for i, value in enumerate(self.cpu.bus.ram[start_addr : end_addr + 1]):
+        for i, value in enumerate(self.cpu.bus.cpu_ram[start_addr : end_addr + 1]):
             # col limit reached
             if i % MEM_DISP_COLS == 0:
                 if i > 0:  # append last line and form a new line
@@ -280,11 +280,11 @@ class Debugger(pyglet.window.Window):
             "00 EA EA EA EA EA EA EA " +
             "EA" 
         ).split(" "):
-            self.cpu.bus.ram[offset] = eval("0x" + code)
+            self.cpu.bus.cpu_ram[offset] = eval("0x" + code)
             offset += 1
 
         # set memory to this address when reset
-        self.cpu.bus.ram[0xFFFC] =  0x00
-        self.cpu.bus.ram[0xFFFD] = 0x10
+        self.cpu.bus.cpu_ram[0xFFFC] =  0x00
+        self.cpu.bus.cpu_ram[0xFFFD] = 0x10
 
         self.cpu.reset()

@@ -127,12 +127,12 @@ class SY6502:
 
     def read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
-        data: int = self.bus.read(addr=addr, readonly=readonly)
+        data: int = self.bus.cpu_read(addr=addr, readonly=readonly)
         return data
 
     def write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
-        self.bus.write(addr=addr, data=data)
+        self.bus.cpu_write(addr=addr, data=data)
 
     def read_flag():
         """Read a specific flag value."""
