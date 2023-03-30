@@ -16,8 +16,8 @@ RIGHT_X: int = int((WIN_WIDTH // 2) * 1.2)  # right column starting x
 MEM_DISP_COLS: int = 16  # number of columns to display raw memory hex
 
 # how many lines to show before and after current pc address
-DISBLR_BEFOR: int = 26
-DISBLR_AFTER: int = 26
+DISBLR_BEFOR: int = 14
+DISBLR_AFTER: int = 24
 
 DSBLR_HEIGHT: int = WIN_HEIGHT * 0.82
 
@@ -35,6 +35,7 @@ class Debugger(pyglet.window.Window):
         # pointer to interested CPU instance
         self.cpu: SY6502 = cpu
         # inject debugging codes
+        self.dbg_start: int
         self.load_debugging_program()
 
         # a batch renders stuffs together in a more efficient way
@@ -60,12 +61,12 @@ class Debugger(pyglet.window.Window):
         self.add_info_view()
 
     def update(self, dt):
-        #self.clear()
+        # self.clear()
         self.draw()
 
     def on_key_press(self, symbol, modifiers):
         """Key pressing interactions."""
-        if symbol == key.SPACE:
+        if symbol == key.C:
             self.cpu.clock()
             while not self.cpu.complete():
                 self.cpu.clock()
@@ -126,7 +127,8 @@ class Debugger(pyglet.window.Window):
 
     def add_page_view(self):
         """Add a random page memory view."""
-        mem_strings: List[str] = self.get_memory_values(0x8000, 0x80FF)
+        mem_strings: List[str] = self.get_memory_values(
+            self.dbg_start, self.dbg_start + 0xFF)
         mem_str: str = "\u2028".join(mem_strings)
         document = pyglet.text.document.FormattedDocument(mem_str)
         document.set_style(
@@ -166,15 +168,16 @@ class Debugger(pyglet.window.Window):
 
         # get program counter
         mem_strings.append(
-            "PC: $" + f"{self.cpu.pc:0{4}X}" +
-            f"    CYCLE: {self.cpu.cycle}" 
+            "PC: $" + f"{self.cpu.pc:0{4}X}" + f"    CYCLE: {self.cpu.cycle}"
         )
         # get registers
         mem_strings.append("A: $" + f"{self.cpu.a:0{2}X}    [{self.cpu.a}]")
         mem_strings.append("X: $" + f"{self.cpu.x:0{2}X}    [{self.cpu.x}]")
         mem_strings.append("Y: $" + f"{self.cpu.y:0{2}X}    [{self.cpu.y}]")
         # get stack pointer
-        mem_strings.append(f"STKP: ${self.cpu.stkp:0{4}X}  REL: ${self.cpu.addr_rel:0{4}X}")
+        mem_strings.append(
+            f"STKP: ${self.cpu.stkp:0{4}X}  REL: ${self.cpu.addr_rel:0{4}X}"
+        )
 
         # add them into views
         mem_str: str = "\u2028".join(mem_strings)
@@ -200,9 +203,7 @@ class Debugger(pyglet.window.Window):
         _lines: List[str] = list(disassembled.values())
         # add an manual break to highlight current pc address
 
-        mem_str: str = "\u2028".join(
-            _lines
-        )
+        mem_str: str = "\u2028".join(_lines)
         document = pyglet.text.document.FormattedDocument(mem_str)
         document.set_style(
             0,
@@ -221,7 +222,7 @@ class Debugger(pyglet.window.Window):
     def add_info_view(self):
         """Add a view for displaying debugger usage."""
         lines: str = (
-            """== SPACE: CLOCK == R: RESET == I: INTERRUPT == N: NMI == D: EXIT =="""
+            """== C: STEP == R: RESET == I: INTERRUPT == N: NMI == D: EXIT =="""
         )
         # add an manual break to highlight current pc address
 
@@ -269,18 +270,21 @@ class Debugger(pyglet.window.Window):
         which converts to the magic string.
         """
         # offset to inject code
-        offset: int = 0x8000
+        offset: int = 0x1000
+        self.dbg_start = offset
 
         for code in (
-            "A2 0A 8E 00 00 A2 03 8E 01 00 AC "
-            + "00 00 A9 00 18 6D 01 00 88 D0 FA "
-            + "8D 02 00 EA EA EA"
+            "A2 0A 8E 00 00 A2 03 8E " +
+            "01 00 AC 00 00 A9 00 18 " +
+            "6D 01 00 88 D0 FA 8D 02 " +
+            "00 EA EA EA EA EA EA EA " +
+            "EA" 
         ).split(" "):
             self.cpu.bus.ram[offset] = eval("0x" + code)
             offset += 1
 
-        # set reset vector
-        self.cpu.bus.ram[0xFFFC] = 0x00
-        self.cpu.bus.ram[0xFFFD] = 0x80
+        # set memory to this address when reset
+        self.cpu.bus.ram[0xFFFC] =  0x00
+        self.cpu.bus.ram[0xFFFD] = 0x10
 
         self.cpu.reset()

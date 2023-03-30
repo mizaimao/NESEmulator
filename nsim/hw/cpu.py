@@ -1124,7 +1124,7 @@ class SY6502:
         self.flags.N = self.a & 0x80
         return 0
 
-    def XXX() -> int:
+    def XXX(self) -> int:
         """Special illegal opcode catcher."""
         return 0
 
@@ -1184,7 +1184,7 @@ class SY6502:
                 lo: int = self.read(addr=addr, readonly=True)
                 hi: int = 0x00
                 addr += 1
-                s_inst += "$" + f"{lo:0{2}X}", +f" {addrmode.__name__}"
+                s_inst += "$" + f"{lo:0{2}X} {addrmode.__name__}"
             elif addrmode in [self.ABS, self.ABX, self.ABY, self.IND]:
                 lo = self.read(addr=addr, readonly=True)
                 addr += 1
