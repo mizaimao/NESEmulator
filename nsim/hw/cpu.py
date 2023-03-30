@@ -1127,15 +1127,22 @@ class SY6502:
                 instructions as values.
         """
         addr: int = start  # The address can be a 32-bit integer.
+        padding: int = 0
+        if start < 0:
+            padding = abs(start)
+            addr = 0x00
+
         value: int = 0x00  # These three variables are 8-bit.
         map: Dict[int, str] = {}  # maps a 16-bit value to a string
+        map[-1] = "\u2028" * padding
+
         line_addr: int = 0x0000
 
         # Read from starting address a byte (instruction), and
         while addr <= end:
             line_addr = addr
             # create a string with address
-            s_inst: str = "$" + hex(addr) + ": "
+            s_inst: str = "$" + f"{addr:0{4}X}" + ": "
 
             # then read instruction and acquire its name
             opcode: int = self.read(addr=addr, readonly=True)
@@ -1153,22 +1160,22 @@ class SY6502:
             elif addrmode == self.IMM:
                 value: int = self.read(addr=addr, readonly=True)
                 addr += 1
-                s_inst += "#$" + hex(value) + " {IMM}"
+                s_inst += "#$" + f"{value:0{2}X}" + " {IMM}"
             elif addrmode in [self.ZP0, self.ZPX, self.ZPY, self.IZX, self.IZY]:
                 lo: int = self.read(addr=addr, readonly=True)
                 hi: int = 0x00
                 addr += 1
-                s_inst += "$" + hex(lo), +f" {addrmode.__name__}"
+                s_inst += "$" + f"{lo:0{2}X}", +f" {addrmode.__name__}"
             elif addrmode in [self.ABS, self.ABX, self.ABY, self.IND]:
                 lo = self.read(addr=addr, readonly=True)
                 addr += 1
                 hi = self.read(addr=addr, readonly=True)
                 addr += 1
-                s_inst += "$" + hex((hi << 8) | lo) + f" {addrmode.__name__}"
+                s_inst += "$" + f"{((hi << 8) | lo):0{4}X}" + f" {addrmode.__name__}"
             elif addrmode == self.REL:
                 value = self.read(addr=addr, readonly=True)
                 addr += 1
-                s_inst += "$" + hex(value) + " [$" + hex(addr + value) + "] {REL}"
+                s_inst += "$" + f"{value:0{2}X}" + " [$" + hex(addr + value) + "] {REL}"
 
             map[line_addr] = s_inst
         return map
