@@ -1,0 +1,61 @@
+BITWISE OPERATIONS
+
+&, AND, used for masking
+|, OR, used for extraction
+~, NOT, used for inversion
+^, XOR, used for selection
+<<, SHIFT LEFT, multiply by two
+>>, SHIFT RIGHT, divide by two
+
+A single byte can be divided into individual bits, or groups of bits.
+We can use struct (in C) to conveniently map individual bit (or several bits).
+
+The CPU of NES is called 6502, whose bus has a 16-bit bus, and therefore has
+potential to address 64kb space.
+An abstraction of the system can be viewed as:
+https://www.youtube.com/watch?v=F8kx56OZQhg
+
+                ┌───────────────────┐    16-bit bus        ┌──────────────┐
+                │       6502        │   (64KB range)       │     RAM      │
+┌───────────────│        CPU        │──────────────┬───────│    2048KB    │
+│               │                   │              │       │ $0000-$07FF  │
+│               └───────────────────┘              │       └──────────────┘
+│  ┌───────┐              ▲                        │                       
+│  │ CLOCK │──────────────┤                        │                       
+│  └───────┘              ▼ 3x clock speed as CPU  │       ┌──────────────┐
+│               ┌───────────────────┐              │       │ APU (Audio)  │
+│               │   PPU (Picture)   │              ├───────│ $4000-$4017  │
+│               │    $2000-$2007    │──────────────┤       │              │
+│               │                   │              │       └──────────────┘
+│               └───────────────────┘              │                       
+│                         │  bus                   │                       
+│                         │ (16KB                  │       ┌──────────────┐
+│                         │ range)                 │       │  Cartridge   │
+│                         │                        │       │ $4200-$FFFF  │
+│                         │                        │       │              │
+│                         │                        ├───────│  ┌────────┐  │
+│                         │                        └───────┼──│ Mapper │  │
+│  ┌──────────────┐       │                                │  └────────┘  │
+│  │     DMA      │       │                                │              │
+└──│(Direct memory│       │                                └──────────────┘
+   │   access)    │       │                                        │       
+   └──────────────┘       │                                        │       
+           │              │                                        │       
+           │              │                                        │       
+           ▼              │       ┌──────────────┐                 │       
+   ┌──────────────┐       │       │   Graphics   │                 │       
+   │     OAM      │       ├───────│     8KB      │─────────────────┘       
+   │   (Object    │       │       │ $0000-$1FFF  │                         
+   │  attribute   │───────┤       └──────────────┘                         
+   │   memory)    │       │       ┌──────────────┐                         
+   └──────────────┘       │       │     VRAM     │                         
+                          ├───────│     2KB      │                         
+                          │       │ $2000-$27FF  │                         
+                          │       └──────────────┘                         
+                          │       ┌──────────────┐                         
+                          │       │   Palettes   │                         
+                          └───────│ $3F00-$3FFF  │                         
+                                  │              │                         
+                                  └──────────────┘              
+                                  
+                                             
