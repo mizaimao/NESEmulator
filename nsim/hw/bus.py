@@ -39,6 +39,9 @@ from typing import Tuple, List
 
 import numpy as np
 
+from nsim.hw.cpu import SY6502
+from nsim.hw.ppu import Visual2C02
+
 
 
 RAM_RANGE: Tuple[int, int] = (0x0000, 0xFFFF)
@@ -48,18 +51,18 @@ class Bus6502:
     def __init__(
         self,
     ):
-        # add RAM
-        mem_size: int = RAM_RANGE[1] - RAM_RANGE[0] + 1
-        # np array with specified dtype notifies overflow
-        self.cpu_ram: np.ndarray = np.full((mem_size,), 0x00, dtype=np.uint8)
+        # add cpu to the bus
+        self.cpu: SY6502 = SY6502(ram_range=RAM_RANGE)
+        # map cpu memory
+        self.cpu_ram: np.ndarray = self.cpu.cpu_ram
+        
 
     def cpu_read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
-        if RAM_RANGE[0] <= addr <= RAM_RANGE[1]:
-            data: int = self.cpu_ram[addr]
+        data: int = self.cpu.read(addr=addr, readonly=readonly)
         return data
 
     def cpu_write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
-        if RAM_RANGE[0] <= addr <= RAM_RANGE[1]:
-            self.cpu_ram[addr] = data
+        self.cpu.write(addr=addr, data=data)
+

@@ -27,9 +27,10 @@ Certain devices are read-only or write-only and therefore have to deal with
 invalid operations (or just ignore?).
 """
 from dataclasses import dataclass
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 
-from nsim.hw.bus import Bus6502
+import numpy as np
+
 
 # base address of stack in memory
 STACK_ADDR: int = 0x0100
@@ -98,9 +99,15 @@ class SY6502:
         addrmode: Callable
         cycle: int = 0
 
-    def __init__(self):
-        # connect to the bus, which allocates ram
-        self.bus: Bus6502 = Bus6502()
+    def __init__(self,
+            ram_range: Tuple[int, int]         
+        ):
+        self.ram_range: Tuple[int, int] = ram_range
+        # setup RAM
+        mem_size: int = ram_range[1] - ram_range[0] + 1
+        # np array with specified dtype notifies overflow
+        self.cpu_ram: np.ndarray = np.full((mem_size,), 0x00, dtype=np.uint8)
+
         # setup flags
         self.flags: FLAGS6502 = FLAGS6502()
         # setup registers
@@ -127,12 +134,16 @@ class SY6502:
 
     def read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
-        data: int = self.bus.cpu_read(addr=addr, readonly=readonly)
+        #data: int = self.bus.cpu_read(addr=addr, readonly=readonly)
+        if self.ram_range[0] <= addr <= self.ram_range[1]:
+            data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
         return data
 
     def write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
-        self.bus.cpu_write(addr=addr, data=data)
+        #self.bus.cpu_write(addr=addr, data=data)
+        if self.ram_range[0] <= addr <= self.ram_range[1]:
+            self.cpu_ram[addr & 0x07FF] = data
 
     def read_flag():
         """Read a specific flag value."""
