@@ -5,7 +5,7 @@ from typing import Tuple, List
 import numpy as np
 
 
-RAM_RANGE: Tuple[int, int] = (0x00, 0xFFFF)
+RAM_RANGE: Tuple[int, int] = (0x0000, 0xFFFF)
 
 
 class Bus6502:
