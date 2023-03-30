@@ -250,27 +250,25 @@ class Debugger(pyglet.window.Window):
         and therefore will call/test multiple functions.
 
         Object code:
-        *=$8000
-        LDX #10
-        STX $0000
-        LDX #3
-        STX $0001
-        LDY $0000
-        LDA #0
-        CLC
-        loop
-        ADC $0001
-        DEY
-        BNE loop
-        STA $0002
-        NOP
-        NOP
-        NOP
+            *=$0100
+            LDX #10
+            STX $0000
+            LDX #3
+            STX $0001
+            LDY $0000
+            LDA #0
+            CLC
+            loop
+            ADC $0001
+            DEY
+            BNE loop
+            STA $0002
+            NOP (8 times)
 
         which converts to the magic string.
         """
         # offset to inject code
-        offset: int = 0x1000
+        offset: int = 0x0100
         self.dbg_start = offset
 
         for code in (
@@ -284,7 +282,11 @@ class Debugger(pyglet.window.Window):
             offset += 1
 
         # set memory to this address when reset
-        self.cpu.cpu_ram[0xFFFC] =  0x00
-        self.cpu.cpu_ram[0xFFFD] = 0x10
+        self.cpu.cpu_ram[0xFFFC] =  0x00  # last two digit in offset
+        self.cpu.cpu_ram[0xFFFD] = 0x01  # first two digit in offset
+
+
+        print(self.cpu.cpu_ram[0xFFFC])
+        print(self.cpu.cpu_ram[0xFFFD])
 
         self.cpu.reset()

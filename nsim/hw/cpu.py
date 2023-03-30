@@ -136,14 +136,16 @@ class SY6502:
         """Read a 2-byte address and return a single byte value."""
         #data: int = self.bus.cpu_read(addr=addr, readonly=readonly)
         if self.ram_range[0] <= addr <= self.ram_range[1]:
-            data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
+            #data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
+            data: int = self.cpu_ram[addr]  # ram mirror IO
         return data
 
     def write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
         #self.bus.cpu_write(addr=addr, data=data)
         if self.ram_range[0] <= addr <= self.ram_range[1]:
-            self.cpu_ram[addr & 0x07FF] = data
+            #self.cpu_ram[addr & 0x07FF] = data
+            self.cpu_ram[addr] = data
 
     def read_flag():
         """Read a specific flag value."""
