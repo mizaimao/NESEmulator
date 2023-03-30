@@ -48,21 +48,29 @@ NMI_TIME: int = 8
 class FLAGS6502:
     """Flags in 6502 processor. Each register is a bit."""
 
-    C: int = 1 << 0  # carry bit
-    Z: int = 1 << 1  # zero
-    I: int = 1 << 2  # disable interrupts
-    D: int = 1 << 3  # decimal mode (disabled in this implementation, as does nes)
-    B: int = 1 << 4  # break
-    U: int = 1 << 5  # unused
-    V: int = 1 << 6  # overflow
-    N: int = 1 << 7  # negative (used when using signed variables)
+    C: int = 0  # carry bit
+    Z: int = 0  # zero
+    I: int = 0  # disable interrupts
+    D: int = 0  # decimal mode (disabled in this implementation, as does nes)
+    B: int = 0  # break
+    U: int = 0  # unused
+    V: int = 0  # overflow
+    N: int = 0  # negative (used when using signed variables)
 
     def extract(self) -> int:
         """Convert all flags into an 8-bit value.
         Returns a byte.
         """
         flags: int = (
-            self.C + self.Z + self.I + self.D + self.B + self.U + self.V + self.N
+            self.C
+            << 0 + self.Z
+            << 1 + self.I
+            << 2 + self.D
+            << 3 + self.B
+            << 4 + self.U
+            << 5 + self.V
+            << 6 + self.N
+            << 7
         )
         return flags
 
@@ -99,8 +107,7 @@ class SY6502:
         self.a: int = 0x00  # accumulator register
         self.x: int = 0x00  # X register
         self.y: int = 0x00  # Y register
-        self.stkp: int = 0x00  # stack pointer
-        self.pc: int = 0x0000  # program counter, stores an address
+        self.stkp: int = 0x00  # stack pointer        self.pc: int = 0x0000  # program counter, stores an address
         self.status: int = 0x00  # status register
 
         # variable to store fetched data from addressable locations
@@ -141,11 +148,14 @@ class SY6502:
             # update address
             self.pc += 1
 
+            # always set unused flag to 1
+            self.flags.U = 1
+
             # pointer to dataclass
             instruction: self.Instruction = self.instructions[opcode]
 
             # using this opcode to get required cycle count
-            add_cycle: int = instruction.cycle
+            new_cycle: int = instruction.cycle
             # call the address mode function
             # will return 1 if it requires additional cycles or 0 if not
             add_cycle_address: int = instruction.addrmode()
@@ -156,12 +166,15 @@ class SY6502:
 
             # if either operation or address mode requires additional cycles,
             # we add that to cycle count
-            add_cycle += add_cycle_address & add_cycle_operation
+            new_cycle += add_cycle_address & add_cycle_operation
             # update in-class variable
-            self.cycle += add_cycle
+            self.cycle = new_cycle
 
         # decrease cycle count
         self.cycle -= 1
+
+    def complete(self) -> bool:
+        return self.cycle == 0
 
     def reset(self):
         """Reset signal. Interrupts the processor after current cycle.
@@ -262,6 +275,7 @@ class SY6502:
         # an exception is implicit (IMP) function who does not return a value.
         if self.instructions[self.opcode].addrmode != self.IMP:
             fetched: int = self.read(self.addr_abs)
+
             self.fetched = fetched
             return fetched
         return
@@ -272,7 +286,10 @@ class SY6502:
         """
         # branching requires an additional cycle
         self.cycle += 1
-        self.addr_abs = self.pc + self.addr_rel  # jump with offset
+
+        # python would somehow cast this 16-bit int to 32-bit range, and
+        # therefore we need to mask it
+        self.addr_abs = (self.pc + self.addr_rel) & 0xFFFF  # jump with offset
 
         # if the page cross the page, it would require yet another cycle
         # NOTE: all branching operations would need to check if page changes
@@ -298,8 +315,8 @@ class SY6502:
         Immediate addressing. Operand is the second byte of instruction. We
         therefore increase the counter and update cpu with that address.
         """
-        self.pc += 1
         self.addr_abs = self.pc
+        self.pc += 1
         return 0
 
     def ZP0(self) -> int:
@@ -523,9 +540,9 @@ class SY6502:
         # the carry flag should be the most significant bit of low byte
         self.flags.N = temp & 0x80
         # now the overflow flag
-        xor_result: int = self.a ^ self.temp
+        xor_result: int = self.a ^ temp
         not_xor_result: int = ~(self.a ^ self.fetched)
-        self.flags.V = (xor_result & not_xor_result) & 0x80
+        self.flags.V = (xor_result & not_xor_result) & 0x0080
         # save back the result to accumulator (after filtering out higher byte)
         self.a = temp & 0x00FF
         return 1
@@ -737,16 +754,16 @@ class SY6502:
         """Opcode function.
         Decrease value in x register by one."""
         self.x -= 1
-        self.flags.Z = (self.x & 0x00FF) == 0x0000
-        self.flags.N = self.x & 0x0080
+        self.flags.Z = self.x == 0x00
+        self.flags.N = self.x & 0x80
         return 0
 
     def DEY(self) -> int:
         """Opcode function.
         Decrease value in y register by one."""
         self.y -= 1
-        self.flags.Z = (self.y & 0x00FF) == 0x0000
-        self.flags.N = self.y & 0x0080
+        self.flags.Z = self.y == 0x00
+        self.flags.N = self.y & 0x80
         return 0
 
     def EOR(self) -> int:
@@ -1128,13 +1145,15 @@ class SY6502:
         """
         addr: int = start  # The address can be a 32-bit integer.
         padding: int = 0
+
         if start < 0:
             padding = abs(start)
+            end += padding // 4
             addr = 0x00
 
         value: int = 0x00  # These three variables are 8-bit.
         map: Dict[int, str] = {}  # maps a 16-bit value to a string
-        map[-1] = "\u2028" * padding
+        map[-1] = "\u2028" * (padding // 4)
 
         line_addr: int = 0x0000
 
@@ -1175,7 +1194,12 @@ class SY6502:
             elif addrmode == self.REL:
                 value = self.read(addr=addr, readonly=True)
                 addr += 1
-                s_inst += "$" + f"{value:0{2}X}" + " [$" + hex(addr + value) + "] {REL}"
+                s_inst += "$" + f"{value:0{2}X}" + f" [${addr+value:0{4}X}]" + " {REL}"
+
+            if self.pc == addr:
+                s_inst = "> " + s_inst
+            else:
+                s_inst = "  " + s_inst
 
             map[line_addr] = s_inst
         return map
