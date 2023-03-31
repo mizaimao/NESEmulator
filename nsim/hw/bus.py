@@ -83,7 +83,28 @@ class Bus6502:
         """Reset button on NES."""
         self.cpu.reset()
         self.clock_counter = 0
+        self.cpu.reload_memory(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
+        self.ppu.reload_memory(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
 
     def clock(self):
         """Provides system clock ticks."""
         self.clock_counter += 1
+
+    def bus_cpu_write(self, addr: int, data: int):
+        # write with cartridge first, and that function will return if the
+        # operation was successful
+        if self.cart.cpu_write(addr=addr, data=data):
+            pass
+        elif 0x0000 <= addr <= 0x1FFF:
+            self.cpu.cpu_write(addr=addr, data=data)
+        elif 0x2000 <= addr <= 0x3FFF:
+            self.ppu.cpu_write(addr=(addr & 0x0007) , data=data)
+
+    def bus_cpu_read(self, addr: int) -> int:
+        if self.cart.cpu_read(addr=addr):
+            pass
+        elif 0x0000 <= addr <= 0x1FFF:
+            data: int = self.cpu.cpu_read(addr=addr)
+        elif 0x2000 <= addr <= 0x3FFF:
+            data = self.ppu.cpu_read(addr=(addr & 0x0007))
+        return data

@@ -128,7 +128,8 @@ class Debugger(pyglet.window.Window):
     def add_page_view(self):
         """Add a random page memory view."""
         mem_strings: List[str] = self.get_memory_values(
-            self.dbg_start, self.dbg_start + 0xFF)
+            self.dbg_start, self.dbg_start + 0xFF
+        )
         mem_str: str = "\u2028".join(mem_strings)
         document = pyglet.text.document.FormattedDocument(mem_str)
         document.set_style(
@@ -272,17 +273,17 @@ class Debugger(pyglet.window.Window):
         self.dbg_start = offset
 
         for code in (
-            "A2 0A 8E 00 00 A2 03 8E " +
-            "01 00 AC 00 00 A9 00 18 " +
-            "6D 01 00 88 D0 FA 8D 02 " +
-            "00 EA EA EA EA EA EA EA " +
-            "EA" 
+            "A2 0A 8E 00 00 A2 03 8E "
+            + "01 00 AC 00 00 A9 00 18 "
+            + "6D 01 00 88 D0 FA 8D 02 "
+            + "00 EA EA EA EA EA EA EA "
+            + "EA"
         ).split(" "):
             self.cpu.cpu_ram[offset] = eval("0x" + code)
             offset += 1
 
         # set memory to this address when reset
-        self.cpu.cpu_ram[(0xFFFC & 0x07FF)] =  0x00  # last two digit in offset
+        self.cpu.cpu_ram[(0xFFFC & 0x07FF)] = 0x00  # last two digit in offset
         self.cpu.cpu_ram[(0xFFFD & 0x07FF)] = 0x01  # first two digit in offset
 
         self.cpu.reset()
