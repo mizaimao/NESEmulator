@@ -132,14 +132,18 @@ class SY6502:
         """Read a 2-byte address and return a single byte value."""
         if 0x0000 <= addr <= 0x1FFF:
             data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
-            #data: int = self.cpu_ram[addr]  # ram mirror IO
+            # data: int = self.cpu_ram[addr]  # ram mirror IO
         return data
 
     def cpu_write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
         if 0x0000 <= addr <= 0x1FFF:
             self.cpu_ram[addr & 0x07FF] = data
-            #self.cpu_ram[addr] = data
+            # self.cpu_ram[addr] = data
+
+    def reload_memory(self, cpu_ram: np.ndarray, ppu_ram: np.ndarray):
+        self.cpu_ram = cpu_ram
+        self.ppu_ram = ppu_ram
 
     def read_flag():
         """Read a specific flag value."""

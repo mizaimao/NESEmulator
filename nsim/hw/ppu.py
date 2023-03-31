@@ -23,8 +23,15 @@ class Visual2C02:
         self.name_table: np.ndarray = np.full(
             (2, 1024 - 0x0000 + 1), 0x00, dtype=np.uint8
         )
-
+        # palette storage
         self.palette: np.ndarray = np.full((32,), 0x00, dtype=np.uint8)
+
+        # pattern memory (only for MODs)
+        # This memory exists on normal cartridge systems
+        # This can be removed if no self-written mapper is developed;
+        # it will not affect at all any cartridges
+        self.pattern: np.ndarray = np.full((2, 4096), 0x00, dtype=np.uint8)
+
 
     def cpu_read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value.
@@ -79,6 +86,10 @@ class Visual2C02:
         """Write a byte of data to a 2-byte addr."""
         if 0x2000 <= addr <= 0x3FFF:
             self.ppu_ram[addr & 0x0007] = data
+
+    def reload_memory(self, cpu_ram: np.ndarray, ppu_ram: np.ndarray):
+        self.cpu_ram = cpu_ram
+        self.ppu_ram = ppu_ram
 
     def insert_cartridge(self, cart: Cartridge):
         """Emulates cartridge insertion."""
