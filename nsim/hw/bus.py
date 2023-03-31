@@ -98,7 +98,7 @@ class Bus6502:
         elif 0x0000 <= addr <= 0x1FFF:
             self.cpu.cpu_write(addr=addr, data=data)
         elif 0x2000 <= addr <= 0x3FFF:
-            self.ppu.cpu_write(addr=(addr & 0x0007) , data=data)
+            self.ppu.cpu_write(addr=(addr & 0x0007), data=data)
 
     def bus_cpu_read(self, addr: int) -> int:
         if self.cart.cpu_read(addr=addr):

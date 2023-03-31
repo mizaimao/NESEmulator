@@ -32,7 +32,6 @@ class Visual2C02:
         # it will not affect at all any cartridges
         self.pattern: np.ndarray = np.full((2, 4096), 0x00, dtype=np.uint8)
 
-
     def cpu_read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value.
         CPU can only address 8 address on ppu.
