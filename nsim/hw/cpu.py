@@ -99,14 +99,10 @@ class SY6502:
         addrmode: Callable
         cycle: int = 0
 
-    def __init__(self,
-            ram_range: Tuple[int, int]         
-        ):
-        self.ram_range: Tuple[int, int] = ram_range
-        # setup RAM
-        mem_size: int = ram_range[1] - ram_range[0] + 1
-        # np array with specified dtype notifies overflow
-        self.cpu_ram: np.ndarray = np.full((mem_size,), 0x00, dtype=np.uint8)
+    def __init__(self, cpu_ram: np.ndarray, ppu_ram: np.ndarray):
+        # map memory devices
+        self.cpu_ram: np.ndarray = cpu_ram
+        self.ppu_ram: np.ndarray = ppu_ram
 
         # setup flags
         self.flags: FLAGS6502 = FLAGS6502()
@@ -132,20 +128,18 @@ class SY6502:
         # generate instruction list
         self.instructions: List[self.Instruction] = self.create_instructions()
 
-    def read(self, addr: int, readonly: bool = False) -> int:
+    def cpu_read(self, addr: int, readonly: bool = False) -> int:
         """Read a 2-byte address and return a single byte value."""
-        #data: int = self.bus.cpu_read(addr=addr, readonly=readonly)
-        if self.ram_range[0] <= addr <= self.ram_range[1]:
-            #data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
-            data: int = self.cpu_ram[addr]  # ram mirror IO
+        if 0x0000 <= addr <= 0x1FFF:
+            data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
+            #data: int = self.cpu_ram[addr]  # ram mirror IO
         return data
 
-    def write(self, addr: int, data: int):
+    def cpu_write(self, addr: int, data: int):
         """Write a byte of data to a 2-byte addr."""
-        #self.bus.cpu_write(addr=addr, data=data)
-        if self.ram_range[0] <= addr <= self.ram_range[1]:
-            #self.cpu_ram[addr & 0x07FF] = data
-            self.cpu_ram[addr] = data
+        if 0x0000 <= addr <= 0x1FFF:
+            self.cpu_ram[addr & 0x07FF] = data
+            #self.cpu_ram[addr] = data
 
     def read_flag():
         """Read a specific flag value."""
@@ -157,7 +151,7 @@ class SY6502:
         """Clock function."""
         if self.cycle == 0:
             # read the next opcode, which is 1-byte
-            opcode: int = self.read(addr=self.pc)
+            opcode: int = self.cpu_read(addr=self.pc)
             # update address
             self.pc += 1
 
@@ -205,8 +199,9 @@ class SY6502:
         # loading.
         addr = INIT_ADDR
         # now load the address at that location
-        lower: int = self.read(addr)
-        higher: int = self.read(addr + 1)
+        print(addr, hex(addr))
+        lower: int = self.cpu_read(addr)
+        higher: int = self.cpu_read(addr + 1)
         self.pc = (higher << 8) | lower
 
         # reset other internal variables
@@ -226,11 +221,11 @@ class SY6502:
         if self.flags == 0:
             # save the current program counter to stack
             # it takes two operations because it's a 2-byte variable
-            self.write(  # write the higher byte to lower address location
+            self.cpu_write(  # write the higher byte to lower address location
                 addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
             )
             self.stkp -= 1
-            self.write(  # write lower byte to higher address location
+            self.cpu_write(  # write lower byte to higher address location
                 addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
             )
             self.stkp -= 1
@@ -239,13 +234,13 @@ class SY6502:
             self.flags.B = 0  # break flag
             self.flags.U = 1  # unused flag
             self.flags.I = 1  # disables interrupt flag
-            self.write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
+            self.cpu_write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
             self.stkp -= 1
 
             # set code address to the pre-defined location
             addr: int = INTR_ADDR
-            lower: int = self.read(addr=addr)
-            higher: int = self.read(addr=addr + 1)
+            lower: int = self.cpu_read(addr=addr)
+            higher: int = self.cpu_read(addr=addr + 1)
             self.pc = (higher << 8) | lower
 
             # add cycle overhead
@@ -256,11 +251,11 @@ class SY6502:
         current cycle. This interrupt signal cannot be ignored.
         This is the same function as irq(). Except it cannot be ignored.
         """
-        self.write(  # write the higher byte to lower address location
+        self.cpu_write(  # write the higher byte to lower address location
             addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
         )
         self.stkp -= 1
-        self.write(  # write lower byte to higher address location
+        self.cpu_write(  # write lower byte to higher address location
             addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
         )
         self.stkp -= 1
@@ -269,13 +264,13 @@ class SY6502:
         self.flags.B = 0  # break flag
         self.flags.U = 1  # unused flag
         self.flags.I = 1  # disables interrupt flag
-        self.write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
+        self.cpu_write(addr=STACK_ADDR + self.stkp, data=self.flags.extract())
         self.stkp -= 1
 
         # set code address to the pre-defined location
         addr: int = NMI_ADDR
-        lower: int = self.read(addr=addr)
-        higher: int = self.read(addr=addr + 1)
+        lower: int = self.cpu_read(addr=addr)
+        higher: int = self.cpu_read(addr=addr + 1)
         self.pc = (higher << 8) | lower
 
         # add cycle overhead
@@ -287,7 +282,7 @@ class SY6502:
         """Fetch data from addressable memory. This returns an 8-bit."""
         # an exception is implicit (IMP) function who does not return a value.
         if self.instructions[self.opcode].addrmode != self.IMP:
-            fetched: int = self.read(self.addr_abs)
+            fetched: int = self.cpu_read(self.addr_abs)
 
             self.fetched = fetched
             return fetched
@@ -342,7 +337,7 @@ class SY6502:
         operating on higher pages would require one additional byte. It
         functionally fetches a value with 8-bit address on page zero.
         """
-        self.addr_abs = self.read(self.pc)
+        self.addr_abs = self.cpu_read(self.pc)
         self.pc += 1
         self.addr &= 0x00FF  # masking the page
         return 0
@@ -354,7 +349,7 @@ class SY6502:
         array. The retrieved value has an address, and the value in x register
         offsets that address.
         """
-        self.addr_abs = self.read(self.pc) + self.x
+        self.addr_abs = self.cpu_read(self.pc) + self.x
         self.pc += 1
         self.addr_abs &= 0x00FF
         return 0
@@ -362,7 +357,7 @@ class SY6502:
     def ZPY(self) -> int:
         """Addressing mode.
         Zero-page addressing with value in Y register being used as offset."""
-        self.addr_abs = self.read(self.pc) + self.y
+        self.addr_abs = self.cpu_read(self.pc) + self.y
         self.pc += 1
         self.addr_abs &= 0x00FF
         return 0
@@ -375,7 +370,7 @@ class SY6502:
         A check is written to
         NOTE: this one I don't quite understand.
         """
-        addr: int = self.read(self.pc)
+        addr: int = self.cpu_read(self.pc)
         self.pc += 1
         if addr & 0x80:  # check if it's a negative number
             # if true (negative), set high byte of relative address to ones
@@ -389,9 +384,9 @@ class SY6502:
         Absolute addressing. The second byte of instruction is the offset of the
         next effective address, and the third byte is the page. This forms a
         16-bit address location which has the full 64KB range."""
-        lower: int = self.read(self.pc)  # load lower part
+        lower: int = self.cpu_read(self.pc)  # load lower part
         self.pc += 1  # increase address to reach the next byte
-        higher: int = self.read(self.pc)  # and read the higher part
+        higher: int = self.cpu_read(self.pc)  # and read the higher part
         self.pc += 1  # increase again
         self.addr_abs = (higher << 8) | lower  # combine them
         return 0
@@ -400,9 +395,9 @@ class SY6502:
         """Addressing mode.
         Absolute addressing with X added to the address that
         is contained in the second and third byte."""
-        lower: int = self.read(self.pc)
+        lower: int = self.cpu_read(self.pc)
         self.pc += 1
-        higher: int = self.read(self.pc)
+        higher: int = self.cpu_read(self.pc)
         self.pc += 1
 
         _addr_abs: int = (higher << 8) | lower  # form the base address
@@ -421,9 +416,9 @@ class SY6502:
         """Addressing mode.
         Absolute addressing with Y added to the address that
         is contained in the second and third byte."""
-        lower: int = self.read(self.pc)
+        lower: int = self.cpu_read(self.pc)
         self.pc += 1
-        higher: int = self.read(self.pc)
+        higher: int = self.cpu_read(self.pc)
         self.pc += 1
 
         _addr_abs: int = (higher << 8) | lower  # form the base address
@@ -441,15 +436,15 @@ class SY6502:
         to get that address.
         (This is a pointer implementation)
         """
-        p_lower: int = self.read(self.pc)
+        p_lower: int = self.cpu_read(self.pc)
         self.pc += 1
-        p_higher: int = self.read(self.pc)
+        p_higher: int = self.cpu_read(self.pc)
         self.pc += 1
 
         # combine lower and higher to form address of the pointer
         pointed_addr: int = (p_higher << 8) | p_lower
         # read content that is pointed
-        lower: int = self.read(pointed_addr)
+        lower: int = self.cpu_read(pointed_addr)
         if lower == 0x00FF:
             # this is a hardware bug of 6502, if the pointer's address would
             # cause a carry after increment, then the page should be turned, but
@@ -457,7 +452,7 @@ class SY6502:
             high_addr: int = pointed_addr & 0xFF00
         else:
             high_addr = pointed_addr + 1
-        higher: int = self.read(high_addr)
+        higher: int = self.cpu_read(high_addr)
 
         # form that address pointed by pointer
         self.addr_abs = (higher << 8) | lower
@@ -471,13 +466,13 @@ class SY6502:
         next one forms the desired address.
         """
         # first pointer address that forms the lower part of desired address
-        value: int = self.read(self.pc)
+        value: int = self.cpu_read(self.pc)
         self.pc += 1
         lower_addr: int = (value + self.x) & 0x00FF
         # this way we discard carry
         higher_addr: int = (value + self.x + 1) & 0x00FF
 
-        self.addr_abs = (self.read(higher_addr) << 8) | self.read(lower_addr)
+        self.addr_abs = (self.cpu_read(higher_addr) << 8) | self.cpu_read(lower_addr)
         return 0
 
     def IZY(self) -> int:
@@ -492,11 +487,11 @@ class SY6502:
         above, but...
         """
         # read offset location of the pointer
-        value: int = self.read(self.pc)
+        value: int = self.cpu_read(self.pc)
         self.pc += 1
 
-        lower: int = self.read(value & 0x00FF)
-        higher: int = self.read((value + 1) & 0x00FF)
+        lower: int = self.cpu_read(value & 0x00FF)
+        higher: int = self.cpu_read((value + 1) & 0x00FF)
 
         addr: int = higher << 8 | lower
         addr += self.y
@@ -585,7 +580,7 @@ class SY6502:
         if self.instructions[self.opcode].addrmode == self.IMP:
             self.a = temp & 0x00FF
         else:
-            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+            self.cpu_write(addr=self.addr_abs, data=temp & 0x00FF)
         return 0
 
     def BCC(self) -> int:
@@ -662,17 +657,17 @@ class SY6502:
         self.pc += 1
 
         self.flags.I = 1
-        self.write(addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF)
+        self.cpu_write(addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF)
         self.stkp -= 1
-        self.write(addr=STACK_ADDR + self.stkp, data=self.pc & 0x00FF)
+        self.cpu_write(addr=STACK_ADDR + self.stkp, data=self.pc & 0x00FF)
         self.stkp -= 1
 
         self.flags.B = 1  # Break flag
-        self.write(addr=STACK_ADDR + self.stkp, data=self.status)
+        self.cpu_write(addr=STACK_ADDR + self.stkp, data=self.status)
         self.stkp -= 1
         self.flags.B = 0
 
-        self.pc = self.read(INTR_ADDR) | (self.read(0xFFFF) << 8)
+        self.pc = self.cpu_read(INTR_ADDR) | (self.cpu_read(0xFFFF) << 8)
         return 0
 
     def BVC(self) -> int:
@@ -758,7 +753,7 @@ class SY6502:
         """
         self.fetch()
         temp: int = self.fetched - 1
-        self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        self.cpu_write(addr=self.addr_abs, data=temp & 0x00FF)
         self.flags.Z = (temp & 0x00FF) == 0x0000
         self.flags.N = temp & 0x0080
         return 0
@@ -795,7 +790,7 @@ class SY6502:
         """
         self.fetch()
         temp: int = self.fetched + 1  # 16-bit space
-        self.write(addr=self.addr_abs, data=temp & 0x00FF)
+        self.cpu_write(addr=self.addr_abs, data=temp & 0x00FF)
         self.flags.Z = (temp & 0x00FF) == 0x0000
         self.flags.N = temp & 0x0080
         return 0
@@ -832,11 +827,11 @@ class SY6502:
         Jump to new location and save return address to stack.
         """
         self.pc -= 1
-        self.write(  # write the higher byte to lower address location
+        self.cpu_write(  # write the higher byte to lower address location
             addr=STACK_ADDR + self.stkp, data=(self.pc >> 8) & 0x00FF
         )
         self.stkp -= 1
-        self.write(  # write lower byte to higher address location
+        self.cpu_write(  # write lower byte to higher address location
             addr=STACK_ADDR + self.stkp, data=(self.pc & 0x00FF)
         )
         self.stkp -= 1
@@ -884,7 +879,7 @@ class SY6502:
         if self.instructions[self.opcode].addrmode == self.IMP:
             self.a = temp & 0x00FF
         else:
-            self.write(self.addr_abs, temp & 0x00FF)
+            self.cpu_write(self.addr_abs, temp & 0x00FF)
         return 0
 
     def NOP(self) -> int:
@@ -913,7 +908,7 @@ class SY6502:
         Note that the stack exists in RAM and therefore we need to call the
         memory-modifying function to do that.
         """
-        self.write(addr=STACK_ADDR + self.stkp, data=self.a)
+        self.cpu_write(addr=STACK_ADDR + self.stkp, data=self.a)
         self.stkp -= 1
         return 0
 
@@ -921,7 +916,7 @@ class SY6502:
         """Opcode function.
         Push status register to stack.
         """
-        self.write(
+        self.cpu_write(
             addr=STACK_ADDR + self.stkp, data=self.status | self.flags.B | self.flags.U
         )
         self.stkp -= 1
@@ -934,7 +929,7 @@ class SY6502:
         Pop the stack.
         """
         self.stkp += 1
-        self.a = self.read(addr=STACK_ADDR + self.stkp)
+        self.a = self.cpu_read(addr=STACK_ADDR + self.stkp)
         self.flags.Z = self.a == 0x00
         self.flags.N = self.a & 0x80
         return 0
@@ -944,7 +939,7 @@ class SY6502:
         Pop stack to status register.
         """
         self.stkp += 1
-        self.status = self.read(addr=STACK_ADDR + self.stkp)
+        self.status = self.cpu_read(addr=STACK_ADDR + self.stkp)
         self.flags.U = 1  # Unused register
         return 0
 
@@ -961,7 +956,7 @@ class SY6502:
         if self.instructions[self.opcode] == self.IMP:
             self.a = temp & 0x00FF
         else:
-            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+            self.cpu_write(addr=self.addr_abs, data=temp & 0x00FF)
         return 0
 
     def ROR(self) -> int:
@@ -978,7 +973,7 @@ class SY6502:
         if self.instructions[self.opcode] == self.IMP:
             self.a = temp & 0x00FF
         else:
-            self.write(addr=self.addr_abs, data=temp & 0x00FF)
+            self.cpu_write(addr=self.addr_abs, data=temp & 0x00FF)
         return 0
 
     def RTI(self) -> int:
@@ -986,14 +981,14 @@ class SY6502:
         Restore processor before interruption occurred.
         """
         self.stkp += 1
-        self.status: int = self.read(STACK_ADDR + self.stkp)
+        self.status: int = self.cpu_read(STACK_ADDR + self.stkp)
         self.status &= ~self.flags.B
         self.status &= ~self.flags.U
 
         self.stkp += 1
-        self.pc = self.read(STACK_ADDR + self.stkp)
+        self.pc = self.cpu_read(STACK_ADDR + self.stkp)
         self.stkp += 1
-        self.pc |= self.read(STACK_ADDR + self.stkp) << 8
+        self.pc |= self.cpu_read(STACK_ADDR + self.stkp) << 8
 
         return 0
 
@@ -1002,9 +997,9 @@ class SY6502:
         Return from subroutine.
         """
         self.stkp += 1
-        self.pc = self.read(STACK_ADDR + self.stkp)
+        self.pc = self.cpu_read(STACK_ADDR + self.stkp)
         self.stkp += 1
-        self.pc |= self.read(STACK_ADDR + self.stkp) << 8
+        self.pc |= self.cpu_read(STACK_ADDR + self.stkp) << 8
 
         self.pc += 1
         return 0
@@ -1068,21 +1063,21 @@ class SY6502:
         """Opcode function.
         Store accumulator to memory.
         """
-        self.write(addr=self.addr_abs, data=self.a)
+        self.cpu_write(addr=self.addr_abs, data=self.a)
         return 0
 
     def STX(self) -> int:
         """Opcode function.
         Store x register value to memory.
         """
-        self.write(addr=self.addr_abs, data=self.x)
+        self.cpu_write(addr=self.addr_abs, data=self.x)
         return 0
 
     def STY(self) -> int:
         """Opcode function.
         Store y register value to memory.
         """
-        self.write(addr=self.addr_abs, data=self.y)
+        self.cpu_write(addr=self.addr_abs, data=self.y)
         return 0
 
     def TAX(self) -> int:
@@ -1177,7 +1172,7 @@ class SY6502:
             s_inst: str = "$" + f"{addr:0{4}X}" + ": "
 
             # then read instruction and acquire its name
-            opcode: int = self.read(addr=addr, readonly=True)
+            opcode: int = self.cpu_read(addr=addr, readonly=True)
             addr += 1
             # pointer to current instruction
             instruction: self.Instruction = self.instructions[opcode]
@@ -1190,22 +1185,22 @@ class SY6502:
             if addrmode == self.IMP:
                 s_inst += " {IMP}"
             elif addrmode == self.IMM:
-                value: int = self.read(addr=addr, readonly=True)
+                value: int = self.cpu_read(addr=addr, readonly=True)
                 addr += 1
                 s_inst += "#$" + f"{value:0{2}X}" + " {IMM}"
             elif addrmode in [self.ZP0, self.ZPX, self.ZPY, self.IZX, self.IZY]:
-                lo: int = self.read(addr=addr, readonly=True)
+                lo: int = self.cpu_read(addr=addr, readonly=True)
                 hi: int = 0x00
                 addr += 1
                 s_inst += "$" + f"{lo:0{2}X} {addrmode.__name__}"
             elif addrmode in [self.ABS, self.ABX, self.ABY, self.IND]:
-                lo = self.read(addr=addr, readonly=True)
+                lo = self.cpu_read(addr=addr, readonly=True)
                 addr += 1
-                hi = self.read(addr=addr, readonly=True)
+                hi = self.cpu_read(addr=addr, readonly=True)
                 addr += 1
                 s_inst += "$" + f"{((hi << 8) | lo):0{4}X}" + f" {addrmode.__name__}"
             elif addrmode == self.REL:
-                value = self.read(addr=addr, readonly=True)
+                value = self.cpu_read(addr=addr, readonly=True)
                 addr += 1
                 s_inst += "$" + f"{value:0{2}X}" + f" [${addr+value:0{4}X}]" + " {REL}"
 

@@ -282,11 +282,7 @@ class Debugger(pyglet.window.Window):
             offset += 1
 
         # set memory to this address when reset
-        self.cpu.cpu_ram[0xFFFC] =  0x00  # last two digit in offset
-        self.cpu.cpu_ram[0xFFFD] = 0x01  # first two digit in offset
-
-
-        print(self.cpu.cpu_ram[0xFFFC])
-        print(self.cpu.cpu_ram[0xFFFD])
+        self.cpu.cpu_ram[(0xFFFC & 0x07FF)] =  0x00  # last two digit in offset
+        self.cpu.cpu_ram[(0xFFFD & 0x07FF)] = 0x01  # first two digit in offset
 
         self.cpu.reset()
