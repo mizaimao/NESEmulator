@@ -49,9 +49,7 @@ import numpy as np
 
 from nsim.hw.mapper import Mapper, Mapper000
 
-mappers: Dict[int, Mapper] = {
-    0: Mapper000
-}
+mappers: Dict[int, Mapper] = {0: Mapper000}
 
 
 @dataclass
@@ -60,6 +58,7 @@ class CartHeader:
     Header of NES file (*.ines). The header is of 16 bytes.
     https://www.nesdev.org/wiki/INES
     """
+
     # byte 0-3, 4-byte constant name in ASCII "NES" plus a MS-DOS EOF
     name: str
     # byte 4, size of program ROM in 16 KB units
@@ -115,8 +114,6 @@ class Cartridge:
         self.chr_memory: np.ndarray = None
         self.mapper: Mapper = None
 
-
-
     def cpu_read(self, addr: int) -> Union[int, None]:
         """Read a 2-byte address and return a single byte value."""
         # uint32 or None
@@ -124,7 +121,7 @@ class Cartridge:
         if mapped:
             return self.prg_memory[mapped]
         return None
-            
+
     def cpu_write(self, addr: int, data: int) -> bool:
         """Write a byte of data to a 2-byte addr.
         Note return type indicates if writing is legal.
@@ -148,7 +145,6 @@ class Cartridge:
         PPU writes are illegal because they write to ROM.
         """
         return False
-        
 
     def load_cart(self, path: Union[Path, str] = None):
         """Load cartridge into numpy array."""
@@ -156,7 +152,9 @@ class Cartridge:
         if not self.path.is_file:
             self.path = Path().resolve().parent.joinpath(f"assets/{self.path}")
         if not self.path.is_file:
-            raise FileNotFoundError(f"File {path} cannot be found at given location or in assets folder.")
+            raise FileNotFoundError(
+                f"File {path} cannot be found at given location or in assets folder."
+            )
         # now load cartridge
         with open(path, "rb") as file:
             contents = file.read()
@@ -166,7 +164,7 @@ class Cartridge:
 
         header_offset: int = 16  # header is of 16-byte size
         # load cartridge header
-        header: CartHeader = Cartridge.load_header(cart = cart)
+        header: CartHeader = Cartridge.load_header(cart=cart)
         # detect if a trainer is on board; it's a 512-byte space before program_rom
         trainer_present: bool = bool(header.mapper1 & 0x04)
         # there are three types of cartridges
@@ -181,28 +179,28 @@ class Cartridge:
             # copy cartridge program data into class attribute
             start: int = header_offset + trainer_present * 512
             end: int = start + data_size
-            self.prg_memory = cart[start: end].copy()
+            self.prg_memory = cart[start:end].copy()
             start = end
 
             self.n_chrbanks = header.chr_rom_chunks
             # number times 8 KB chunks
             data_size = self.n_chrbanks * 8192
             end = start + data_size
-            self.chr_memory = cart[start: end].copy()
+            self.chr_memory = cart[start:end].copy()
         elif cart_type == 2:
             pass
         else:
             raise ValueError(f"Unknown cartridge type: {cart_type}.")
-        
+
         self.n_mapper_id = ((header.mapper2 >> 4) << 4) | (header.mapper1 >> 4)
         self.mapper = mappers[self.n_mapper_id](
             prg_banks=self.n_prgbanks, chr_banks=self.n_chrbanks
         )
 
-    @ staticmethod
+    @staticmethod
     def load_header(cart: np.ndarray) -> CartHeader:
         header: CartHeader = CartHeader(
-            name=cart[0: 4],
+            name=cart[0:4],
             prg_rom_chunks=cart[4],
             chr_rom_chunks=cart[5],
             mapper1=cart[6],
@@ -210,7 +208,6 @@ class Cartridge:
             prg_ram_size=cart[8],
             tv_system1=cart[9],
             tv_system2=cart[10],
-            unused=cart[11:16]
+            unused=cart[11:16],
         )
         return header
-    
