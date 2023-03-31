@@ -44,7 +44,6 @@ from nsim.hw.ppu import Visual2C02
 from nsim.hw.cartridge import Cartridge
 
 
-
 class Bus6502:
     def __init__(
         self,
@@ -58,16 +57,33 @@ class Bus6502:
         self.cpu_ram: np.ndarray = np.full((0x1FFF - 0x0000 + 1,), 0x00, dtype=np.uint8)
         self.ppu_ram: np.ndarray = np.full((0x3FFF - 0x2000 + 1,), 0x00, dtype=np.uint8)
 
+        # setup cartridge
+        self.cart_device: Cartridge = Cartridge(
+            cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram
+        )
+        self.cart: Cartridge = None
+
         # add cpu to the bus
         self.cpu: SY6502 = SY6502(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
         # add ppu
-        self.ppu: Visual2C02 = Visual2C02(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
+        self.ppu: Visual2C02 = Visual2C02(
+            cpu_ram=self.cpu_ram,
+            ppu_ram=self.ppu_ram,
+        )
+
+        # variable logs how many times clock function has been called
+        self.clock_counter: int = 0
 
     def insert_cartridge(self):
         """Emulates cartridge insertion."""
-        
+        self.cart = self.cart_device
+        self.ppu.insert_cartridge(cart=self.cart)
+
     def reset(self):
         """Reset button on NES."""
+        self.cpu.reset()
+        self.clock_counter = 0
 
     def clock(self):
         """Provides system clock ticks."""
+        self.clock_counter += 1
