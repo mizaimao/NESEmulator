@@ -41,28 +41,33 @@ import numpy as np
 
 from nsim.hw.cpu import SY6502
 from nsim.hw.ppu import Visual2C02
+from nsim.hw.cartridge import Cartridge
 
-
-
-RAM_RANGE: Tuple[int, int] = (0x0000, 0xFFFF)
 
 
 class Bus6502:
     def __init__(
         self,
     ):
+        """The referenced design uses bus as the sole target to read and write.
+        But because that Python cannot import in a loop manner, We have to
+        create individual memory devices and share them between different
+        objects, and perform R/W there."""
+        # setup memories
+        # np array with specified dtype notifies overflow
+        self.cpu_ram: np.ndarray = np.full((0x1FFF - 0x0000 + 1,), 0x00, dtype=np.uint8)
+        self.ppu_ram: np.ndarray = np.full((0x3FFF - 0x2000 + 1,), 0x00, dtype=np.uint8)
+
         # add cpu to the bus
-        self.cpu: SY6502 = SY6502(ram_range=RAM_RANGE)
-        # map cpu memory
-        self.cpu_ram: np.ndarray = self.cpu.cpu_ram
+        self.cpu: SY6502 = SY6502(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
+        # add ppu
+        self.ppu: Visual2C02 = Visual2C02(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
+
+    def insert_cartridge(self):
+        """Emulates cartridge insertion."""
         
+    def reset(self):
+        """Reset button on NES."""
 
-    def cpu_read(self, addr: int, readonly: bool = False) -> int:
-        """Read a 2-byte address and return a single byte value."""
-        data: int = self.cpu.read(addr=addr, readonly=readonly)
-        return data
-
-    def cpu_write(self, addr: int, data: int):
-        """Write a byte of data to a 2-byte addr."""
-        self.cpu.write(addr=addr, data=data)
-
+    def clock(self):
+        """Provides system clock ticks."""
