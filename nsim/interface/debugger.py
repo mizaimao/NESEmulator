@@ -86,34 +86,27 @@ class Debugger(pyglet.window.Window):
         #     low=0, high=255, size=(256, 240, 1), dtype=np.uint8
         # )
         # frame: np.ndarray = np.repeat(_frame, repeats=4, axis=-1)
-        _frame: np.ndarray = np.full((256, 240, 3), (100, 100, 100), dtype=np.uint8)
+        _frame: np.ndarray = np.full((240, 256, 3), (100, 100, 100), dtype=np.uint8)
         _frame[50:60, 100:200] = (255, 0, 0)
         frame = _frame
-        # image = pyglet.image.ImageData(
-        #     width=NES_WIN_WIDTH, height=NES_WIN_HEIGH, fmt="RGBA", data=frame,
-        #     pitch= 256 * 4
-        # )
-        #negative pitch means ???
-        # image = pyglet.image.ImageData(
-        #     width=256, height=240,fmt="RGB", data=frame)
+
         image = pyglet.image.create(width=256, height=240)
-        print(image.pitch, image.format, )
-        image.set_data(fmt="RGB", pitch=256 * 3, data=frame)
-        print(image.pitch, image.format, )
-        #image.format = "RGB"
-        # image.width = NES_WIN_HEIGH
-        # image.height = NES_WIN_HEIGH
-        image.blit(0, 0,)# width=NES_WIN_HEIGH, height=NES_WIN_HEIGH)
-        
+        # print(frame.shape)
+        image.set_data(fmt="RGB", pitch=-256 * 3, data=frame)
+        image.format = "RGB"
+
+        image.blit(0, 0, width=NES_WIN_HEIGH, height=NES_WIN_HEIGH)
+
         pyglet.sprite.Sprite(image, batch=self.batch)
 
     def draw_game_frame(self):
         frame: np.ndarray = self.nes.ppu.get_screen()
+        # frame[50:60, 100:200] = (255, 0, 0)
+
         image = pyglet.image.create(width=256, height=240)
-        image.set_data(fmt="RGB", pitch=240, data=frame)
-        image.width = NES_WIN_HEIGH
-        image.height = NES_WIN_HEIGH
-        image.blit(0, 0)
+        image.set_data(fmt="RGB", pitch=-256 * 3, data=frame)
+        image.format = "RGB"
+        image.blit(0, 0, width=NES_WIN_HEIGH, height=NES_WIN_HEIGH)
         pyglet.sprite.Sprite(image, batch=self.batch)
 
     def on_key_press(self, symbol, modifiers):
@@ -151,8 +144,8 @@ class Debugger(pyglet.window.Window):
 
     def on_draw(self):
         self.clear()
-        self.debug_draw_game_frame()
-        #self.draw_game_frame()
+        # self.debug_draw_game_frame()
+        self.draw_game_frame()
         self.batch.draw()
 
     def update(self, dt):
@@ -160,9 +153,7 @@ class Debugger(pyglet.window.Window):
 
     def add_info_view(self):
         """Add a view for displaying debugger usage."""
-        lines: str = (
-            """== C: STEP CPU == F: STEP FRAME == R: RESET == I: IRP (CPU) == N: NMI (CPU)== D: EXIT =="""
-        )
+        lines: str = """== C: STEP CPU == F: STEP FRAME == R: RESET == I: IRP (CPU) == N: NMI (CPU)== D: EXIT =="""
         # add an manual break to highlight current pc address
 
         # mem_str: str = "\u2028".join()
@@ -317,7 +308,6 @@ class Debugger(pyglet.window.Window):
         self.dsblr_text.x = RIGHT_X + NES_WIN_WIDTH + NES_ASS_WIDTH
         self.dsblr_text.y = DSBLR_HEIGHT
         self.dsblr_text.anchor_y = "top"
-
 
     def debug_cpu_program(self):
         """

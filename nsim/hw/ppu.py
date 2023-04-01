@@ -37,7 +37,7 @@ class Visual2C02:
         self.dp_colors: Dict[int, Tuple[int, int, int]] = nes_colors
 
         # storage for main scene
-        self.dp_screen: np.ndarray = np.full((240, 256, 4), 0x00, dtype=np.uint8)
+        self.dp_screen: np.ndarray = np.full((240, 256, 3), 0x00, dtype=np.uint8)
 
         # storage for both name tables
         self.dp_nametb: np.ndarray = np.full((2, 240, 256, 3), 0x00, dtype=np.uint8)
@@ -53,7 +53,8 @@ class Visual2C02:
 
     def get_screen(self) -> np.ndarray:
         """Debugging: Get an image for display."""
-        return np.flip(self.dp_screen, axis=0)
+        # return np.flip(self.dp_screen, axis=0)
+        return self.dp_screen
 
     def get_name_table(self, index: int) -> np.ndarray:
         """Debugging: Get name table for display."""
@@ -67,7 +68,11 @@ class Visual2C02:
         """The clock never stops. (???)"""
         # DEBUGGING USE
         _a: int = self.rng.integers(2)
-        self.dp_screen[self.scanline, self.cycle - 1] = self.dp_colors[0x3E if _a else 0x30]
+
+        if (0 <= self.scanline < 240) and (0 <= self.cycle < 256):
+            self.dp_screen[self.scanline, self.cycle] = self.dp_colors[
+                0x3E if _a else 0x30
+            ]
         ############
 
         self.cycle += 1
