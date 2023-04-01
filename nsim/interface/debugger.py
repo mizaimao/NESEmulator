@@ -4,16 +4,22 @@ from pathlib import Path
 
 import pyglet
 import pyglet.window.key as key
+import numpy as np
 
 from nsim.hw.cpu import SY6502
 from nsim.hw.bus import Bus6502
 from nsim.hw.cartridge import Cartridge
 
 
-WIN_WIDTH: int = 900
-WIN_HEIGHT: int = 600
+# determines height of left and right windows
+DBG_WIN_HEIGHT: int = 720
+# width of debugger
+DBG_WIN_WIDTH: int = 900
+NES_WIN_HEIGH: int = DBG_WIN_HEIGHT
+NES_WIN_WIDTH: int = int(NES_WIN_HEIGH * 256 / 240)
+NES_ASS_WIDTH: int = 80
 
-RIGHT_X: int = int((WIN_WIDTH // 2) * 1.2)  # right column starting x
+RIGHT_X: int = int((DBG_WIN_WIDTH // 2) * 1.2)  # right column starting x
 
 MEM_DISP_COLS: int = 16  # number of columns to display raw memory hex
 
@@ -21,7 +27,7 @@ MEM_DISP_COLS: int = 16  # number of columns to display raw memory hex
 DISBLR_BEFOR: int = 14
 DISBLR_AFTER: int = 24
 
-DSBLR_HEIGHT: int = WIN_HEIGHT * 0.82
+DSBLR_HEIGHT: int = DBG_WIN_HEIGHT * 0.82
 
 
 TEXT_COLOR: Tuple[int, int, int, int] = (200, 200, 200, 255)
@@ -36,8 +42,8 @@ pyglet.font.add_file(
 class Debugger(pyglet.window.Window):
     def __init__(self, nes: SY6502):
         super(Debugger, self).__init__(
-            WIN_WIDTH,
-            WIN_HEIGHT,
+            NES_WIN_WIDTH + NES_ASS_WIDTH + DBG_WIN_WIDTH,
+            DBG_WIN_HEIGHT,
             resizable=False,
             fullscreen=False,
             caption="DEBUGGER",
@@ -60,7 +66,6 @@ class Debugger(pyglet.window.Window):
         pyglet.clock.schedule_interval(self.update, 1 / 30)
 
     def draw_views(self):
-        del self.batch
         self.batch = pyglet.graphics.Batch()
         # these four views are all connected to the above batch object
         # create view for page zero in memory
@@ -74,19 +79,67 @@ class Debugger(pyglet.window.Window):
         # view for debugger operation hints
         self.add_info_view()
 
-    def update(self, dt):
-        # self.clear()
-        # self.draw()
-        pass
+        print(np.unique(self.nes.ppu.dp_screen))
+
+    def debug_draw_game_frame(self):
+        # _frame: np.ndarray = np.random.randint(
+        #     low=0, high=255, size=(256, 240, 1), dtype=np.uint8
+        # )
+        # frame: np.ndarray = np.repeat(_frame, repeats=4, axis=-1)
+        _frame: np.ndarray = np.full((256, 240, 3), (100, 100, 100), dtype=np.uint8)
+        _frame[50:60, 100:200] = (255, 0, 0)
+        frame = _frame
+        # image = pyglet.image.ImageData(
+        #     width=NES_WIN_WIDTH, height=NES_WIN_HEIGH, fmt="RGBA", data=frame,
+        #     pitch= 256 * 4
+        # )
+        #negative pitch means ???
+        # image = pyglet.image.ImageData(
+        #     width=256, height=240,fmt="RGB", data=frame)
+        image = pyglet.image.create(width=256, height=240)
+        print(image.pitch, image.format, )
+        image.set_data(fmt="RGB", pitch=256 * 3, data=frame)
+        print(image.pitch, image.format, )
+        #image.format = "RGB"
+        # image.width = NES_WIN_HEIGH
+        # image.height = NES_WIN_HEIGH
+        image.blit(0, 0,)# width=NES_WIN_HEIGH, height=NES_WIN_HEIGH)
+        
+        pyglet.sprite.Sprite(image, batch=self.batch)
+
+    def draw_game_frame(self):
+        frame: np.ndarray = self.nes.ppu.get_screen()
+        image = pyglet.image.create(width=256, height=240)
+        image.set_data(fmt="RGB", pitch=240, data=frame)
+        image.width = NES_WIN_HEIGH
+        image.height = NES_WIN_HEIGH
+        image.blit(0, 0)
+        pyglet.sprite.Sprite(image, batch=self.batch)
 
     def on_key_press(self, symbol, modifiers):
         """Key pressing interactions."""
-        if symbol == key.C:
-            self.cpu.clock()
+        if symbol == key.C:  # step cpu
+            # clock until cpu finishes an instruction
+            self.nes.clock()
             while not self.cpu.complete():
-                self.cpu.clock()
+                self.nes.clock()
+            # cpu clocks runs slower than ppu, so complete additional ones
+            # to drain out the remainders
+            self.nes.clock()
+            while self.cpu.complete():
+                self.nes.clock()
+
+        elif symbol == key.F:  # step frame
+            self.nes.clock()
+            while not self.nes.ppu.frame_complete:
+                self.nes.clock()
+            self.nes.clock()
+            while not self.nes.cpu.complete():
+                self.nes.clock()
+            self.nes.ppu.frame_complete = False
+
         elif symbol == key.R:
-            self.cpu.reset()
+            self.nes.reset()
         elif symbol == key.I:
             self.cpu.irq()
         elif symbol == key.N:
@@ -94,12 +147,40 @@ class Debugger(pyglet.window.Window):
         elif symbol == key.D:
             self.close()
         self.draw_views()
-
         return
 
     def on_draw(self):
         self.clear()
+        self.debug_draw_game_frame()
+        #self.draw_game_frame()
         self.batch.draw()
+
+    def update(self, dt):
+        pass
+
+    def add_info_view(self):
+        """Add a view for displaying debugger usage."""
+        lines: str = (
+            """== C: STEP CPU == F: STEP FRAME == R: RESET == I: IRP (CPU) == N: NMI (CPU)== D: EXIT =="""
+        )
+        # add an manual break to highlight current pc address
+
+        # mem_str: str = "\u2028".join()
+        document = pyglet.text.document.FormattedDocument(lines)
+        document.set_style(
+            0,
+            len(lines),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
+        )
+        self.info_text = pyglet.text.layout.TextLayout(
+            document, multiline=True, wrap_lines=False, batch=self.batch
+        )
+
+        # location related
+        self.info_text.x = DBG_WIN_WIDTH // 2 + NES_WIN_WIDTH + NES_ASS_WIDTH
+        self.info_text.y = DBG_WIN_HEIGHT * 0.055
+        self.info_text.anchor_x = "center"
+        self.info_text.anchor_y = "top"
 
     def get_memory_values(self, start_addr: int, end_addr: int) -> List[str]:
         """Convert requested range of memory into strings. Inclusive range."""
@@ -135,8 +216,8 @@ class Debugger(pyglet.window.Window):
         )
 
         # location related
-        self.page0_text.x = 0
-        self.page0_text.y = WIN_HEIGHT
+        self.page0_text.x = 0 + NES_WIN_WIDTH + NES_ASS_WIDTH
+        self.page0_text.y = DBG_WIN_HEIGHT
         self.page0_text.anchor_y = "top"
 
     def add_page_view(self):
@@ -159,8 +240,8 @@ class Debugger(pyglet.window.Window):
         )
 
         # location related
-        self.pager_text.x = 0
-        self.pager_text.y = WIN_HEIGHT // 2
+        self.pager_text.x = 0 + NES_WIN_WIDTH + NES_ASS_WIDTH
+        self.pager_text.y = DBG_WIN_HEIGHT // 2
         self.pager_text.anchor_y = "top"
 
     def add_register_view(self):
@@ -209,8 +290,8 @@ class Debugger(pyglet.window.Window):
             document, multiline=True, wrap_lines=False, batch=self.batch
         )
         # location
-        self.status_text.x = RIGHT_X
-        self.status_text.y = WIN_HEIGHT
+        self.status_text.x = RIGHT_X + NES_WIN_WIDTH + NES_ASS_WIDTH
+        self.status_text.y = DBG_WIN_HEIGHT
         self.status_text.anchor_y = "top"
 
     def add_disassembler_view(self):
@@ -233,33 +314,10 @@ class Debugger(pyglet.window.Window):
         )
 
         # location related
-        self.dsblr_text.x = RIGHT_X
+        self.dsblr_text.x = RIGHT_X + NES_WIN_WIDTH + NES_ASS_WIDTH
         self.dsblr_text.y = DSBLR_HEIGHT
         self.dsblr_text.anchor_y = "top"
 
-    def add_info_view(self):
-        """Add a view for displaying debugger usage."""
-        lines: str = (
-            """== C: STEP == R: RESET == I: INTERRUPT == N: NMI == D: EXIT =="""
-        )
-        # add an manual break to highlight current pc address
-
-        # mem_str: str = "\u2028".join()
-        document = pyglet.text.document.FormattedDocument(lines)
-        document.set_style(
-            0,
-            len(lines),
-            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
-        )
-        self.info_text = pyglet.text.layout.TextLayout(
-            document, multiline=True, wrap_lines=False, batch=self.batch
-        )
-
-        # location related
-        self.info_text.x = WIN_WIDTH // 2
-        self.info_text.y = WIN_HEIGHT * 0.055
-        self.info_text.anchor_x = "center"
-        self.info_text.anchor_y = "top"
 
     def debug_cpu_program(self):
         """
@@ -312,7 +370,7 @@ class Debugger(pyglet.window.Window):
         assert self.nes.cart.mapper is not None, "ROM not not loaded."
         self.nes.cpu.reset()
 
-    def load_debugging_program(self, mode: str = "ROM"):
+    def load_debugging_program(self, mode: str = "CPU"):
         # hash table to store available programs
         programs: Dict[str, Callable] = {
             "CPU": self.debug_cpu_program,
