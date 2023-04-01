@@ -86,11 +86,17 @@ class Bus6502:
         """Reset button on NES."""
         self.cpu.reset()
         self.clock_counter = 0
+        self.cpu_ram[:] = 0x00
+        self.ppu_ram[:] = 0x00
         self.cpu.reload_memory(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
         self.ppu.reload_memory(cpu_ram=self.cpu_ram, ppu_ram=self.ppu_ram)
 
     def clock(self):
         """Provides system clock ticks."""
+        self.ppu.clock()
+        # PPU is clocked three times as CPU
+        if self.clock_counter % 3 == 0:
+            self.cpu.clock()
         self.clock_counter += 1
 
     def cpu_read(self, addr: int, readonly: bool = False) -> int:
