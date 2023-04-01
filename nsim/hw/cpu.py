@@ -183,6 +183,12 @@ class SY6502:
 
         # decrease cycle count
         self.cycle -= 1
+        # fix stack pointer
+        self.stkp &= 0xFF
+        self.status &= 0xFF
+        self.fetched &= 0xFF
+        self.addr_abs &= 0xFFFF
+        self.addr_rel &= 0xFF
 
     def complete(self) -> bool:
         return self.cycle == 0
