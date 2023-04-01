@@ -101,7 +101,9 @@ class CartHeader:
 class Cartridge:
     """Cartridge of NES."""
 
-    def __init__(self, cpu_ram: np.ndarray, ppu_ram: np.ndarray):
+    def __init__(
+        self, cpu_ram: np.ndarray, ppu_ram: np.ndarray, cart_path: Path = None
+    ):
         # map memory devices
         self.cpu_ram: np.ndarray = cpu_ram
         self.ppu_ram: np.ndarray = ppu_ram
@@ -113,6 +115,9 @@ class Cartridge:
         self.prg_memory: np.ndarray = None
         self.chr_memory: np.ndarray = None
         self.mapper: Mapper = None
+
+        # load cartridge
+        self.load_cart(cart_path=cart_path)
 
     def cpu_read(self, addr: int) -> Union[int, None]:
         """Read a 2-byte address and return a single byte value."""
@@ -146,17 +151,23 @@ class Cartridge:
         """
         return False
 
-    def load_cart(self, path: Union[Path, str] = None):
+    def load_cart(self, cart_path: Union[Path, str] = None):
         """Load cartridge into numpy array."""
-        self.path: Path = Path(path)
-        if not self.path.is_file:
-            self.path = Path().resolve().parent.joinpath(f"assets/{self.path}")
-        if not self.path.is_file:
+        if cart_path is None:
+            print("No cartridge.")
+            return
+
+        cart_path: Path = Path(cart_path)
+        if not cart_path.is_file():
+            print(Path().resolve().parent, cart_path)
+            cart_path = Path(__file__).parent.parent.joinpath(f"assets/{cart_path}")
+            print(cart_path)
+        if not cart_path.is_file():
             raise FileNotFoundError(
-                f"File {path} cannot be found at given location or in assets folder."
+                f"File {cart_path} cannot be found at given location or in assets folder."
             )
         # now load cartridge
-        with open(path, "rb") as file:
+        with open(cart_path, "rb") as file:
             contents = file.read()
         # may raise other errors
         # load cart dump as a hex (8-bit unsigned) array

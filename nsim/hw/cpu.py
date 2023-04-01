@@ -36,9 +36,12 @@ import numpy as np
 STACK_ADDR: int = 0x0100
 # address for initial address pointer
 INIT_ADDR: int = 0xFFFC
+# INIT_ADDR: int = 0xFFFC & 0x07FF
 # address for interrupt options to load codes from
 INTR_ADDR: int = 0xFFFE
+# INTR_ADDR: int = 0xFFFE & 0x07FF
 NMI_ADDR: int = 0xFFFA
+# NMI_ADDR: int = 0xFFFA & 0x07FF
 # resetting the CPU takes time, and this is a hardcoded cycle count
 RESET_TIME: int = 8
 INTR_TIME: int = 7
@@ -128,18 +131,15 @@ class SY6502:
         # generate instruction list
         self.instructions: List[self.Instruction] = self.create_instructions()
 
-    def cpu_read(self, addr: int, readonly: bool = False) -> int:
-        """Read a 2-byte address and return a single byte value."""
-        if 0x0000 <= addr <= 0x1FFF:
-            data: int = self.cpu_ram[addr & 0x07FF]  # ram mirror IO
-            # data: int = self.cpu_ram[addr]  # ram mirror IO
-        return data
+        # this is a hack to call class function from the that creates this instance
+        self.cpu_read: Callable
+        self.cpu_write: Callable
 
-    def cpu_write(self, addr: int, data: int):
-        """Write a byte of data to a 2-byte addr."""
-        if 0x0000 <= addr <= 0x1FFF:
-            self.cpu_ram[addr & 0x07FF] = data
-            # self.cpu_ram[addr] = data
+    def inject_parent_functions(
+        self, read_function: Callable, write_function: Callable
+    ):
+        self.cpu_read = read_function
+        self.cpu_write = write_function
 
     def reload_memory(self, cpu_ram: np.ndarray, ppu_ram: np.ndarray):
         self.cpu_ram = cpu_ram
@@ -203,7 +203,6 @@ class SY6502:
         # loading.
         addr = INIT_ADDR
         # now load the address at that location
-        print(addr, hex(addr))
         lower: int = self.cpu_read(addr)
         higher: int = self.cpu_read(addr + 1)
         self.pc = (higher << 8) | lower
