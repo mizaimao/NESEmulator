@@ -1,11 +1,13 @@
 """Debugger window showing memory and dissembler."""
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 from pathlib import Path
 
 import pyglet
 import pyglet.window.key as key
 
 from nsim.hw.cpu import SY6502
+from nsim.hw.bus import Bus6502
+from nsim.hw.cartridge import Cartridge
 
 
 WIN_WIDTH: int = 900
@@ -21,6 +23,10 @@ DISBLR_AFTER: int = 24
 
 DSBLR_HEIGHT: int = WIN_HEIGHT * 0.82
 
+
+TEXT_COLOR: Tuple[int, int, int, int] = (200, 200, 200, 255)
+BG_COLOR: Tuple[int, int, int, int] = (0, 0, 0, 255)
+
 file_path: Path = Path(__file__)
 pyglet.font.add_file(
     str(file_path.parent.joinpath("../assets/Perfect DOS VGA 437.ttf"))
@@ -28,14 +34,23 @@ pyglet.font.add_file(
 
 
 class Debugger(pyglet.window.Window):
-    def __init__(self, cpu: SY6502):
+    def __init__(self, nes: SY6502):
         super(Debugger, self).__init__(
-            WIN_WIDTH, WIN_HEIGHT, resizable=False, fullscreen=False, caption="DEBUGGER"
+            WIN_WIDTH,
+            WIN_HEIGHT,
+            resizable=False,
+            fullscreen=False,
+            caption="DEBUGGER",
+            config=pyglet.gl.Config(double_buffer=True),
         )
-        # pointer to interested CPU instance
-        self.cpu: SY6502 = cpu
+        # setup background color
+        pyglet.gl.glClearColor(*BG_COLOR)
+
+        # pointer to instance
+        self.nes: Bus6502 = nes
+        self.cpu: SY6502 = nes.cpu
         # inject debugging codes
-        self.dbg_start: int
+        self.dbg_start: int = None
         self.load_debugging_program()
 
         # a batch renders stuffs together in a more efficient way
@@ -45,7 +60,6 @@ class Debugger(pyglet.window.Window):
         pyglet.clock.schedule_interval(self.update, 1 / 30)
 
     def draw_views(self):
-        self.clear()
         del self.batch
         self.batch = pyglet.graphics.Batch()
         # these four views are all connected to the above batch object
@@ -62,7 +76,8 @@ class Debugger(pyglet.window.Window):
 
     def update(self, dt):
         # self.clear()
-        self.draw()
+        # self.draw()
+        pass
 
     def on_key_press(self, symbol, modifiers):
         """Key pressing interactions."""
@@ -78,12 +93,11 @@ class Debugger(pyglet.window.Window):
             self.cpu.nmi()
         elif symbol == key.D:
             self.close()
-
         self.draw_views()
 
         return
 
-    def draw(self):
+    def on_draw(self):
         self.clear()
         self.batch.draw()
 
@@ -114,7 +128,7 @@ class Debugger(pyglet.window.Window):
         document.set_style(
             0,
             len(mem_str),
-            dict(color=(255, 255, 255, 255), font_name="Perfect DOS VGA 437"),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
         )
         self.page0_text = pyglet.text.layout.TextLayout(
             document, multiline=True, wrap_lines=False, batch=self.batch
@@ -127,6 +141,9 @@ class Debugger(pyglet.window.Window):
 
     def add_page_view(self):
         """Add a random page memory view."""
+        if self.dbg_start is None:
+            self.dbg_start = 0x1F00
+
         mem_strings: List[str] = self.get_memory_values(
             self.dbg_start, self.dbg_start + 0xFF
         )
@@ -135,7 +152,7 @@ class Debugger(pyglet.window.Window):
         document.set_style(
             0,
             len(mem_str),
-            dict(color=(255, 255, 255, 255), font_name="Perfect DOS VGA 437"),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
         )
         self.pager_text = pyglet.text.layout.TextLayout(
             document, multiline=True, wrap_lines=False, batch=self.batch
@@ -186,7 +203,7 @@ class Debugger(pyglet.window.Window):
         document.set_style(
             0,
             len(mem_str),
-            dict(color=(255, 255, 255, 255), font_name="Perfect DOS VGA 437"),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
         )
         self.status_text = pyglet.text.layout.TextLayout(
             document, multiline=True, wrap_lines=False, batch=self.batch
@@ -209,7 +226,7 @@ class Debugger(pyglet.window.Window):
         document.set_style(
             0,
             len(mem_str),
-            dict(color=(255, 255, 255, 255), font_name="Perfect DOS VGA 437"),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
         )
         self.dsblr_text = pyglet.text.layout.TextLayout(
             document, multiline=True, wrap_lines=False, batch=self.batch
@@ -232,7 +249,7 @@ class Debugger(pyglet.window.Window):
         document.set_style(
             0,
             len(lines),
-            dict(color=(255, 255, 255, 255), font_name="Perfect DOS VGA 437"),
+            dict(color=TEXT_COLOR, font_name="Perfect DOS VGA 437"),
         )
         self.info_text = pyglet.text.layout.TextLayout(
             document, multiline=True, wrap_lines=False, batch=self.batch
@@ -244,7 +261,7 @@ class Debugger(pyglet.window.Window):
         self.info_text.anchor_x = "center"
         self.info_text.anchor_y = "top"
 
-    def load_debugging_program(self):
+    def debug_cpu_program(self):
         """
         Load Program (assembled at https://www.masswerk.at/6502/assembler.html)
         This program multiplies 10 by 3. The CPU does not support multiplication
@@ -279,11 +296,28 @@ class Debugger(pyglet.window.Window):
             + "00 EA EA EA EA EA EA EA "
             + "EA"
         ).split(" "):
-            self.cpu.cpu_ram[offset] = eval("0x" + code)
+            self.nes.cpu_write(addr=offset, data=eval("0x" + code))
             offset += 1
 
         # set memory to this address when reset
-        self.cpu.cpu_ram[(0xFFFC & 0x07FF)] = 0x00  # last two digit in offset
-        self.cpu.cpu_ram[(0xFFFD & 0x07FF)] = 0x01  # first two digit in offset
+        # last two digit in offset
+        self.nes.cpu_write(addr=(0xFFFC & 0x07FF), data=0x00)
+        # first two digit in offset
+        self.nes.cpu_write(addr=(0xFFFD & 0x07FF), data=0x01)
 
-        self.cpu.reset()
+        self.nes.cpu.reset()
+
+    def debug_rom_program(self):
+        """Load nothing, but run from loaded rom."""
+        assert self.nes.cart.mapper is not None, "ROM not not loaded."
+        self.nes.cpu.reset()
+
+    def load_debugging_program(self, mode: str = "ROM"):
+        # hash table to store available programs
+        programs: Dict[str, Callable] = {
+            "CPU": self.debug_cpu_program,
+            "ROM": self.debug_rom_program,
+        }
+
+        # load correct program and execute
+        programs[mode]()
